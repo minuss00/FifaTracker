@@ -990,33 +990,31 @@
   }
 }
 
-.session-users-section {
+.users-list-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   margin-bottom: 20px;
 }
 
-.session-users-section h3 {
-  margin-top: 0;
-  margin-bottom: 16px;
-  color: #333;
-}
-
-.users-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.user-item {
+.user-item-modal {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px;
+  padding: 14px;
   background: #f8f9fa;
-  border-radius: 6px;
+  border-radius: 8px;
   border-left: 3px solid #667eea;
+  transition: all 0.2s;
+}
+
+.user-item-modal:hover {
+  background: #e9ecef;
+  border-left-color: #5a67d8;
 }
 
 .user-name {
   font-weight: 500;
   color: #333;
+  font-size: 1rem;
 }

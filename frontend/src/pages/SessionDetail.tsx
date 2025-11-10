@@ -27,6 +27,7 @@ function SessionDetail() {
   const [addUserError, setAddUserError] = useState<string | null>(null);
   const [customMatchError, setCustomMatchError] = useState<string | null>(null);
   const [showAddUser, setShowAddUser] = useState(false);
+  const [showManagePlayers, setShowManagePlayers] = useState(false);
   const [showCustomMatch, setShowCustomMatch] = useState(false);
   const [activeTab, setActiveTab] = useState<'matches' | 'leaderboard'>('matches');
   const [leaderboardMode, setLeaderboardMode] = useState<'standard' | 'effectiveness'>('standard');
@@ -360,6 +361,13 @@ function SessionDetail() {
                 <span className="btn-text">Add Player</span>
               </button>
               <button
+                onClick={() => setShowManagePlayers(!showManagePlayers)}
+                className="btn btn-secondary btn-icon-mobile"
+              >
+                <span className="btn-icon">👥</span>
+                <span className="btn-text">Manage Players</span>
+              </button>
+              <button
                 onClick={() => setShowCustomMatch(!showCustomMatch)}
                 className="btn btn-secondary btn-icon-mobile"
               >
@@ -434,6 +442,44 @@ function SessionDetail() {
       </Modal>
 
       <Modal
+        isOpen={showManagePlayers}
+        onClose={() => setShowManagePlayers(false)}
+        title="Manage Players"
+        size="medium"
+      >
+        <div className="modal-form">
+          <p className="form-hint">Current players in this session. You can remove players, which will delete all their matches and generate new ones.</p>
+          <div className="users-list-modal">
+            {session.users.map((user) => (
+              <div key={user.userId} className="user-item-modal">
+                <span className="user-name">{user.userName}</span>
+                <button
+                  onClick={() => setConfirmDialog({
+                    isOpen: true,
+                    title: 'Remove Player',
+                    message: `Are you sure you want to remove ${user.userName} from this session? All their matches will be deleted and new matches will be generated.`,
+                    onConfirm: () => {
+                      handleRemoveUser(user.userId);
+                      setShowManagePlayers(false);
+                    }
+                  })}
+                  className="btn btn-danger btn-sm"
+                  title="Remove player"
+                >
+                  🗑️ Remove
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="modal-actions">
+            <button onClick={() => setShowManagePlayers(false)} className="btn btn-secondary">
+              Close
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         isOpen={showCustomMatch}
         onClose={() => {
           setShowCustomMatch(false);
@@ -499,31 +545,6 @@ function SessionDetail() {
           </div>
         </div>
       </Modal>
-
-      <div className="session-users-section">
-        <h3>Players ({session.users.length})</h3>
-        <div className="users-list">
-          {session.users.map((user) => (
-            <div key={user.userId} className="user-item">
-              <span className="user-name">{user.userName}</span>
-              {session.status === 'Active' && (
-                <button
-                  onClick={() => setConfirmDialog({
-                    isOpen: true,
-                    title: 'Remove Player',
-                    message: `Are you sure you want to remove ${user.userName} from this session? All their matches will be deleted and new matches will be generated.`,
-                    onConfirm: () => handleRemoveUser(user.userId)
-                  })}
-                  className="btn btn-danger btn-sm"
-                  title="Remove player"
-                >
-                  🗑️ Remove
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
 
       <div className="tabs">
         <button
