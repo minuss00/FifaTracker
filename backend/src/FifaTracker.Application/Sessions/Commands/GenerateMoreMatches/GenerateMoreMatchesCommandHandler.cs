@@ -28,6 +28,13 @@ public class GenerateMoreMatchesCommandHandler : IRequestHandler<GenerateMoreMat
         if (session.Status != Domain.Entities.SessionStatus.Active)
             throw new InvalidOperationException("Cannot generate matches for inactive session");
 
+        // Clear existing generated matches before generating new ones
+        var existingGeneratedMatches = await _context.Matches
+            .Where(m => m.SessionId == request.SessionId && m.IsGenerated && !m.IsCompleted)
+            .ToListAsync(cancellationToken);
+
+        _context.Matches.RemoveRange(existingGeneratedMatches);
+
         var existingMatches = await _context.Matches
             .Where(m => m.SessionId == request.SessionId)
             .Include(m => m.MatchTeams)

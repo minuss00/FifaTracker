@@ -101,16 +101,16 @@ function SessionDetail() {
     });
   };
 
-  const handleGenerateMoreMatches = async () => {
+  const handleRegenerateMatches = async () => {
     if (!id) return;
     try {
       const response = await sessionsApi.generateMoreMatches(id, 5);
       loadSession();
       if (response.data.generatedCount > 0) {
-        console.log(`Generated ${response.data.generatedCount} new matches`);
+        console.log(`Regenerated ${response.data.generatedCount} new matches`);
       }
     } catch (err: any) {
-      console.error('Failed to generate more matches:', err);
+      console.error('Failed to regenerate matches:', err);
     }
   };
 
@@ -357,11 +357,16 @@ function SessionDetail() {
                 <span className="btn-text">Custom Match</span>
               </button>
               <button
-                onClick={handleGenerateMoreMatches}
+                onClick={() => setConfirmDialog({
+                  isOpen: true,
+                  title: 'Regenerate Matches',
+                  message: 'This will clear all existing generated matches and create new ones. Are you sure?',
+                  onConfirm: handleRegenerateMatches
+                })}
                 className="btn btn-success btn-icon-mobile"
               >
                 <span className="btn-icon">🔄</span>
-                <span className="btn-text">Generate Matches</span>
+                <span className="btn-text">Regenerate Matches</span>
               </button>
               <button onClick={handleEndSession} className="btn btn-danger btn-icon-mobile">
                 <span className="btn-icon">🛑</span>

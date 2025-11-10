@@ -170,49 +170,177 @@ public class MatchGenerator : IMatchGenerator
         if (players.Count < 4)
             return null;
 
-        // Get all existing match combinations (both from completed and new matches)
-        var usedCombinations = new HashSet<string>();
+        // Get all existing teammate pairs from completed and new matches
+        var usedTeammatePairs = new HashSet<string>();
         foreach (var match in existingMatches.Concat(newMatches))
         {
-            var team1 = match.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList();
-            var team2 = match.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList();
-            usedCombinations.Add(MatchCombination.GetKey(team1, team2));
+            var team1Players = match.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList();
+            var team2Players = match.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList();
+
+            // Add teammate pairs from team 1
+            if (team1Players.Count == 2)
+            {
+                var pair = GetTeammatePairKey(team1Players[0], team1Players[1]);
+                usedTeammatePairs.Add(pair);
+            }
+
+            // Add teammate pairs from team 2
+            if (team2Players.Count == 2)
+            {
+                var pair = GetTeammatePairKey(team2Players[0], team2Players[1]);
+                usedTeammatePairs.Add(pair);
+            }
         }
 
-        // Generate all possible 2v2 combinations
-        var allCombinations = GenerateAllPossibleCombinations(players);
+        // Generate all possible teammate pairs
+        var allPossiblePairs = GenerateAllPossibleTeammatePairs(players);
 
-        // First try to find a completely unused combination
-        var unusedCombination = allCombinations
-            .FirstOrDefault(c => !usedCombinations.Contains(c.Key));
-
-        if (unusedCombination != null)
-        {
-            return CreateTwoVsTwoMatch(sessionId, unusedCombination.Team1, unusedCombination.Team2, createdAt);
-        }
-
-        // If all combinations have been used, find one that hasn't been used in recent matches
-        // Get combinations in reverse chronological order (newest first)
-        var recentMatchCombinations = existingMatches
-            .Concat(newMatches)
-            .OrderByDescending(m => m.CreatedAt)
-            .Select(m => MatchCombination.GetKey(
-                m.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList(),
-                m.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList()))
+        // Find unused teammate pairs
+        var unusedPairs = allPossiblePairs
+            .Where(pair => !usedTeammatePairs.Contains(pair.Key))
             .ToList();
 
-        // Find the combination that was used least recently
-        var leastRecentCombination = allCombinations
-            .OrderByDescending(c => recentMatchCombinations.IndexOf(c.Key))
-            .First();
+        if (unusedPairs.Count >= 2)
+        {
+            // Sort pairs by average player priority (players who have played less)
+            var sortedUnusedPairs = unusedPairs
+                .OrderByDescending(pair =>
+                    (playerStats[pair.Player1].Priority + playerStats[pair.Player2].Priority) / 2.0)
+                .ToList();
 
-        return CreateTwoVsTwoMatch(sessionId, leastRecentCombination.Team1, leastRecentCombination.Team2, createdAt);
+            // Try to form teams with unused pairs that don't share players
+            for (int i = 0; i < sortedUnusedPairs.Count - 1; i++)
+            {
+                var pair1 = sortedUnusedPairs[i];
+                for (int j = i + 1; j < sortedUnusedPairs.Count; j++)
+                {
+                    var pair2 = sortedUnusedPairs[j];
+
+                    // Check if pairs don't share players
+                    if (!pair1.Players.Intersect(pair2.Players).Any())
+                    {
+                        // Randomly assign which pair is team1 vs team2
+                        var random = new Random();
+                        if (random.Next(2) == 0)
+                        {
+                            return CreateTwoVsTwoMatch(sessionId, pair1.Players, pair2.Players, createdAt);
+                        }
+                        else
+                        {
+                            return CreateTwoVsTwoMatch(sessionId, pair2.Players, pair1.Players, createdAt);
+                        }
+                    }
+                }
+            }
+        }
+
+        // If we can't find two unused pairs that don't share players, or if all pairs are used,
+        // fall back to the old logic but prioritize by least recently used teammate pairs
+        var allPairsWithUsage = allPossiblePairs
+            .Select(pair => new
+            {
+                Pair = pair,
+                LastUsedIndex = GetLastUsedIndex(pair.Key, existingMatches.Concat(newMatches).ToList())
+            })
+            .OrderByDescending(x => x.LastUsedIndex) // Most recently used first, so least recently used will be at the end
+            .Select(x => x.Pair)
+            .ToList();
+
+        // Try to find two pairs that don't share players, starting with least recently used
+        for (int i = allPairsWithUsage.Count - 1; i >= 1; i--)
+        {
+            var pair1 = allPairsWithUsage[i];
+            for (int j = i - 1; j >= 0; j--)
+            {
+                var pair2 = allPairsWithUsage[j];
+
+                if (!pair1.Players.Intersect(pair2.Players).Any())
+                {
+                    var random = new Random();
+                    if (random.Next(2) == 0)
+                    {
+                        return CreateTwoVsTwoMatch(sessionId, pair1.Players, pair2.Players, createdAt);
+                    }
+                    else
+                    {
+                        return CreateTwoVsTwoMatch(sessionId, pair2.Players, pair1.Players, createdAt);
+                    }
+                }
+            }
+        }
+
+        // If still no valid combination found, use the first available pairs
+        if (allPairsWithUsage.Count >= 2)
+        {
+            var pair1 = allPairsWithUsage[allPairsWithUsage.Count - 1];
+            var pair2 = allPairsWithUsage[allPairsWithUsage.Count - 2];
+            return CreateTwoVsTwoMatch(sessionId, pair1.Players, pair2.Players, createdAt);
+        }
+
+        return null;
+    }
+
+    private class TeammatePair
+    {
+        public Guid Player1 { get; set; }
+        public Guid Player2 { get; set; }
+        public List<Guid> Players => new List<Guid> { Player1, Player2 };
+        public string Key => GetTeammatePairKey(Player1, Player2);
+    }
+
+    private string GetTeammatePairKey(Guid player1, Guid player2)
+    {
+        var sorted = new[] { player1, player2 }.OrderBy(id => id).ToArray();
+        return $"{sorted[0]}-{sorted[1]}";
+    }
+
+    private List<TeammatePair> GenerateAllPossibleTeammatePairs(List<Guid> players)
+    {
+        var pairs = new List<TeammatePair>();
+        for (int i = 0; i < players.Count - 1; i++)
+        {
+            for (int j = i + 1; j < players.Count; j++)
+            {
+                pairs.Add(new TeammatePair
+                {
+                    Player1 = players[i],
+                    Player2 = players[j]
+                });
+            }
+        }
+        return pairs;
+    }
+
+    private int GetLastUsedIndex(string pairKey, List<Match> matches)
+    {
+        for (int i = matches.Count - 1; i >= 0; i--)
+        {
+            var match = matches[i];
+            var team1Players = match.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList();
+            var team2Players = match.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList();
+
+            var pairsInMatch = new List<string>();
+            if (team1Players.Count == 2)
+            {
+                pairsInMatch.Add(GetTeammatePairKey(team1Players[0], team1Players[1]));
+            }
+            if (team2Players.Count == 2)
+            {
+                pairsInMatch.Add(GetTeammatePairKey(team2Players[0], team2Players[1]));
+            }
+
+            if (pairsInMatch.Contains(pairKey))
+            {
+                return i;
+            }
+        }
+        return -1; // Never used
     }
 
     private List<MatchCombination> GenerateAllPossibleCombinations(List<Guid> players)
     {
         var combinations = new List<MatchCombination>();
-        
+
         // Generate all possible 2v2 combinations
         for (int i = 0; i < players.Count - 3; i++)
         {
@@ -223,22 +351,22 @@ public class MatchGenerator : IMatchGenerator
                     for (int l = k + 1; l < players.Count; l++)
                     {
                         // Create teams where players i,j are on one team and k,l on another
-                        combinations.Add(new MatchCombination 
-                        { 
+                        combinations.Add(new MatchCombination
+                        {
                             Team1 = new List<Guid> { players[i], players[j] },
                             Team2 = new List<Guid> { players[k], players[l] }
                         });
 
                         // Create teams where players i,k are on one team and j,l on another
-                        combinations.Add(new MatchCombination 
-                        { 
+                        combinations.Add(new MatchCombination
+                        {
                             Team1 = new List<Guid> { players[i], players[k] },
                             Team2 = new List<Guid> { players[j], players[l] }
                         });
 
                         // Create teams where players i,l are on one team and j,k on another
-                        combinations.Add(new MatchCombination 
-                        { 
+                        combinations.Add(new MatchCombination
+                        {
                             Team1 = new List<Guid> { players[i], players[l] },
                             Team2 = new List<Guid> { players[j], players[k] }
                         });
