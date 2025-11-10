@@ -23,27 +23,49 @@ public class MatchGenerator : IMatchGenerator
         var playerStats = CalculatePlayerStats(userIds, existingMatches, userJoinTimes, sessionStartTime, now);
         
         // Generate matches based on type
-        for (int i = 0; i < targetCount; i++)
+        if (matchType == FifaTracker.Domain.Entities.MatchType.TwoVsTwo)
         {
-            // Each match gets a slightly later CreatedAt time to maintain order
-            var createdAt = now.AddMilliseconds(i);
-            
-            Match? newMatch = matchType switch
+            // For 2v2, generate all possible unique combinations, then stop
+            int i = 0;
+            while (true)
             {
-                FifaTracker.Domain.Entities.MatchType.OneVsOne => GenerateSmartOneVsOneMatch(sessionId, playerStats, existingMatches, matches, createdAt),
-                FifaTracker.Domain.Entities.MatchType.TwoVsTwo => GenerateSmartTwoVsTwoMatch(sessionId, playerStats, existingMatches, matches, createdAt),
-                FifaTracker.Domain.Entities.MatchType.TwoVsOne => GenerateSmartTwoVsOneMatch(sessionId, playerStats, existingMatches, matches, createdAt),
-                _ => null
-            };
-            
-            if (newMatch != null)
-            {
-                matches.Add(newMatch);
-                UpdatePlayerStatsAfterMatch(playerStats, newMatch);
+                var createdAt = now.AddMilliseconds(i);
+                var newMatch = GenerateSmartTwoVsTwoMatch(sessionId, playerStats, existingMatches, matches, createdAt);
+                if (newMatch != null)
+                {
+                    matches.Add(newMatch);
+                    UpdatePlayerStatsAfterMatch(playerStats, newMatch);
+                    i++;
+                }
+                else
+                {
+                    break;
+                }
             }
-            else
+        }
+        else
+        {
+            for (int i = 0; i < targetCount; i++)
             {
-                break; // Can't generate more unique matches
+                // Each match gets a slightly later CreatedAt time to maintain order
+                var createdAt = now.AddMilliseconds(i);
+
+                Match? newMatch = matchType switch
+                {
+                    FifaTracker.Domain.Entities.MatchType.OneVsOne => GenerateSmartOneVsOneMatch(sessionId, playerStats, existingMatches, matches, createdAt),
+                    FifaTracker.Domain.Entities.MatchType.TwoVsOne => GenerateSmartTwoVsOneMatch(sessionId, playerStats, existingMatches, matches, createdAt),
+                    _ => null
+                };
+
+                if (newMatch != null)
+                {
+                    matches.Add(newMatch);
+                    UpdatePlayerStatsAfterMatch(playerStats, newMatch);
+                }
+                else
+                {
+                    break; // Can't generate more unique matches
+                }
             }
         }
         
