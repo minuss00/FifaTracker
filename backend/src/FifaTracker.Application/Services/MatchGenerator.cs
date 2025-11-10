@@ -13,9 +13,13 @@ public class MatchGenerator : IMatchGenerator
         Dictionary<Guid, DateTime> userJoinTimes,
         DateTime sessionStartTime)
     {
+        // Don't generate new matches if there are pending matches
+        if (existingMatches.Any(m => !m.IsCompleted))
+            return new List<Match>();
+
         var matches = new List<Match>();
         var now = DateTime.UtcNow;
-        
+
         // Filter out unplayed matches from existingMatches
         existingMatches = existingMatches.Where(m => m.IsCompleted).ToList();
         
