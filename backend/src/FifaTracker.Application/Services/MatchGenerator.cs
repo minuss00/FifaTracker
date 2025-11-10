@@ -47,6 +47,11 @@ public class MatchGenerator : IMatchGenerator
             }
         }
         
+        // Sort matches so that matches with players who have played less are first
+        matches = matches.OrderByDescending(m =>
+            m.MatchTeams.Average(mt => playerStats[mt.UserId].Priority)
+        ).ToList();
+
         return matches;
     }
 
@@ -260,10 +265,6 @@ public class MatchGenerator : IMatchGenerator
 
                 if (!pair1.Players.Intersect(pair2.Players).Any())
                 {
-                    // Check if any of the teams have already been used
-                    if (TeamsUsed(pair1.Players, pair2.Players, existingMatches, newMatches))
-                        continue;
-
                     var random = new Random();
                     if (random.Next(2) == 0)
                     {
