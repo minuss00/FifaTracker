@@ -145,6 +145,20 @@ public class MatchGenerator : IMatchGenerator
         return CreateMatch(sessionId, new List<Guid> { shuffledPlayers[0].Key }, new List<Guid> { shuffledPlayers[1].Key }, createdAt);
     }
 
+    private class MatchCombination
+    {
+        public List<Guid> Team1 { get; set; } = new List<Guid>();
+        public List<Guid> Team2 { get; set; } = new List<Guid>();
+        public string Key => GetKey(Team1, Team2);
+
+        public static string GetKey(List<Guid> team1, List<Guid> team2)
+        {
+            var sortedTeam1 = string.Join(",", team1.OrderBy(id => id));
+            var sortedTeam2 = string.Join(",", team2.OrderBy(id => id));
+            return $"{sortedTeam1}|{sortedTeam2}";
+        }
+    }
+
     private Match? GenerateSmartTwoVsTwoMatch(
         Guid sessionId,
         Dictionary<Guid, PlayerMatchStats> playerStats,
@@ -152,150 +166,90 @@ public class MatchGenerator : IMatchGenerator
         List<Match> newMatches,
         DateTime createdAt)
     {
-        var sortedPlayers = playerStats.OrderByDescending(p => p.Value.Priority).Select(p => p.Key).ToList();
-        
-        if (sortedPlayers.Count < 4)
+        var players = playerStats.Keys.ToList();
+        if (players.Count < 4)
             return null;
 
-        // Build a graph of who has played with whom
-        var playedWith = new Dictionary<Guid, HashSet<Guid>>();
-        foreach (var player in sortedPlayers)
-        {
-            playedWith[player] = new HashSet<Guid>();
-        }
-
-        // Analyze existing matches and new matches to build the graph
+        // Get all existing match combinations (both from completed and new matches)
+        var usedCombinations = new HashSet<string>();
         foreach (var match in existingMatches.Concat(newMatches))
         {
-            var team1Players = match.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList();
-            var team2Players = match.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList();
-
-            // Record teammates within each team
-            foreach (var player1 in team1Players)
-            {
-                foreach (var player2 in team1Players)
-                {
-                    if (player1 != player2)
-                    {
-                        playedWith[player1].Add(player2);
-                        playedWith[player2].Add(player1);
-                    }
-                }
-            }
-
-            foreach (var player1 in team2Players)
-            {
-                foreach (var player2 in team2Players)
-                {
-                    if (player1 != player2)
-                    {
-                        playedWith[player1].Add(player2);
-                        playedWith[player2].Add(player1);
-                    }
-                }
-            }
+            var team1 = match.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList();
+            var team2 = match.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList();
+            usedCombinations.Add(MatchCombination.GetKey(team1, team2));
         }
 
-        // Find players who have played with the fewest others
-        var playersByUnplayedCount = sortedPlayers
-            .OrderByDescending(p => sortedPlayers.Count - playedWith[p].Count)
+        // Generate all possible 2v2 combinations
+        var allCombinations = GenerateAllPossibleCombinations(players);
+
+        // First try to find a completely unused combination
+        var unusedCombination = allCombinations
+            .FirstOrDefault(c => !usedCombinations.Contains(c.Key));
+
+        if (unusedCombination != null)
+        {
+            return CreateTwoVsTwoMatch(sessionId, unusedCombination.Team1, unusedCombination.Team2, createdAt);
+        }
+
+        // If all combinations have been used, find one that hasn't been used in recent matches
+        // Get combinations in reverse chronological order (newest first)
+        var recentMatchCombinations = existingMatches
+            .Concat(newMatches)
+            .OrderByDescending(m => m.CreatedAt)
+            .Select(m => MatchCombination.GetKey(
+                m.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList(),
+                m.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList()))
             .ToList();
 
-        // First pass: Try to find a match where players haven't played together
-        foreach (var player1 in playersByUnplayedCount)
-        {
-            var potentialTeammates = playersByUnplayedCount
-                .Where(p => p != player1 && !playedWith[player1].Contains(p))
-                .ToList();
+        // Find the combination that was used least recently
+        var leastRecentCombination = allCombinations
+            .OrderByDescending(c => recentMatchCombinations.IndexOf(c.Key))
+            .First();
 
-            foreach (var player2 in potentialTeammates)
-            {
-                var remainingPlayers = playersByUnplayedCount
-                    .Where(p => p != player1 && p != player2)
-                    .ToList();
-
-                foreach (var player3 in remainingPlayers)
-                {
-                    var potentialTeammate4 = remainingPlayers
-                        .FirstOrDefault(p => p != player3 &&
-                                           !playedWith[player3].Contains(p) &&
-                                           !TeamMatchupExists(
-                                               new List<Guid> { player1, player2 },
-                                               new List<Guid> { player3, p },
-                                               existingMatches,
-                                               newMatches));
-
-                    if (potentialTeammate4 != null)
-                    {
-                        return CreateTwoVsTwoMatch(
-                            sessionId,
-                            new List<Guid> { player1, player2 },
-                            new List<Guid> { player3, potentialTeammate4 },
-                            createdAt);
-                    }
-                }
-            }
-        }
-
-        // Second pass: If all players have played with each other at least once,
-        // find the combination that has been used the least
-        var teamCombinationCounts = new Dictionary<string, int>();
-        foreach (var match in existingMatches.Concat(newMatches))
-        {
-            var team1 = string.Join(",", match.MatchTeams
-                .Where(mt => mt.TeamNumber == 1)
-                .Select(mt => mt.UserId)
-                .OrderBy(id => id));
-            var team2 = string.Join(",", match.MatchTeams
-                .Where(mt => mt.TeamNumber == 2)
-                .Select(mt => mt.UserId)
-                .OrderBy(id => id));
-            var key = $"{team1}|{team2}";
-            teamCombinationCounts[key] = teamCombinationCounts.GetValueOrDefault(key, 0) + 1;
-        }
-
-        // Generate all possible team combinations and find the least used one
-        var leastUsedTeams = GenerateLeastUsedTeamCombination(sortedPlayers, teamCombinationCounts);
-        if (leastUsedTeams != null)
-        {
-            return CreateTwoVsTwoMatch(sessionId, leastUsedTeams.Item1, leastUsedTeams.Item2, createdAt);
-        }
-
-        return null;
+        return CreateTwoVsTwoMatch(sessionId, leastRecentCombination.Team1, leastRecentCombination.Team2, createdAt);
     }
 
-    private Tuple<List<Guid>, List<Guid>>? GenerateLeastUsedTeamCombination(
-        List<Guid> players,
-        Dictionary<string, int> teamCombinationCounts)
+    private List<MatchCombination> GenerateAllPossibleCombinations(List<Guid> players)
     {
-        var minCount = int.MaxValue;
-        Tuple<List<Guid>, List<Guid>>? leastUsedTeams = null;
-
+        var combinations = new List<MatchCombination>();
+        
+        // Generate all possible 2v2 combinations
         for (int i = 0; i < players.Count - 3; i++)
         {
             for (int j = i + 1; j < players.Count - 2; j++)
             {
-                var team1 = new List<Guid> { players[i], players[j] };
-
                 for (int k = j + 1; k < players.Count - 1; k++)
                 {
                     for (int l = k + 1; l < players.Count; l++)
                     {
-                        var team2 = new List<Guid> { players[k], players[l] };
-                        var key = $"{string.Join(",", team1.OrderBy(id => id))}|{string.Join(",", team2.OrderBy(id => id))}";
-                        var count = teamCombinationCounts.GetValueOrDefault(key, 0);
+                        // Create teams where players i,j are on one team and k,l on another
+                        combinations.Add(new MatchCombination 
+                        { 
+                            Team1 = new List<Guid> { players[i], players[j] },
+                            Team2 = new List<Guid> { players[k], players[l] }
+                        });
 
-                        if (count < minCount)
-                        {
-                            minCount = count;
-                            leastUsedTeams = Tuple.Create(team1, team2);
-                        }
+                        // Create teams where players i,k are on one team and j,l on another
+                        combinations.Add(new MatchCombination 
+                        { 
+                            Team1 = new List<Guid> { players[i], players[k] },
+                            Team2 = new List<Guid> { players[j], players[l] }
+                        });
+
+                        // Create teams where players i,l are on one team and j,k on another
+                        combinations.Add(new MatchCombination 
+                        { 
+                            Team1 = new List<Guid> { players[i], players[l] },
+                            Team2 = new List<Guid> { players[j], players[k] }
+                        });
                     }
                 }
             }
         }
 
-        return leastUsedTeams;
+        // Shuffle the combinations to add randomness when all combinations have been used
+        var random = new Random();
+        return combinations.OrderBy(x => random.Next()).ToList();
     }
     
     private Match CreateTwoVsTwoMatch(Guid sessionId, List<Guid> team1, List<Guid> team2, DateTime createdAt)
