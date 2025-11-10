@@ -265,6 +265,11 @@ public class MatchGenerator : IMatchGenerator
 
                 if (!pair1.Players.Intersect(pair2.Players).Any())
                 {
+                    // Check if this matchup already exists
+                    if (TeamMatchupExists(pair1.Players, pair2.Players, existingMatches, newMatches) ||
+                        TeamMatchupExists(pair2.Players, pair1.Players, existingMatches, newMatches))
+                        continue;
+
                     var random = new Random();
                     if (random.Next(2) == 0)
                     {
