@@ -118,6 +118,8 @@ export const sessionsApi = {
   end: (id: string) => api.post(`/sessions/${id}/end`),
   addUser: (id: string, userId: string) =>
     api.post(`/sessions/${id}/users`, { UserId: userId }),
+  removeUser: (id: string, userId: string) =>
+    api.delete(`/sessions/${id}/users/${userId}`),
   generateMoreMatches: (id: string, targetCount: number = 5) =>
     api.post<{ generatedCount: number }>(`/sessions/${id}/generate-matches`, { TargetCount: targetCount }),
 };

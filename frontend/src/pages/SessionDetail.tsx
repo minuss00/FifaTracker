@@ -164,6 +164,16 @@ function SessionDetail() {
     }
   };
 
+  const handleRemoveUser = async (userId: string) => {
+    if (!id) return;
+    try {
+      await sessionsApi.removeUser(id, userId);
+      loadSession();
+    } catch (err: any) {
+      console.error('Failed to remove user:', err);
+    }
+  };
+
   const togglePlayerInTeam = (userId: string, team: 'team1' | 'team2') => {
     setCustomMatch(prev => ({
       ...prev,
@@ -489,6 +499,31 @@ function SessionDetail() {
           </div>
         </div>
       </Modal>
+
+      <div className="session-users-section">
+        <h3>Players ({session.users.length})</h3>
+        <div className="users-list">
+          {session.users.map((user) => (
+            <div key={user.userId} className="user-item">
+              <span className="user-name">{user.userName}</span>
+              {session.status === 'Active' && (
+                <button
+                  onClick={() => setConfirmDialog({
+                    isOpen: true,
+                    title: 'Remove Player',
+                    message: `Are you sure you want to remove ${user.userName} from this session? All their matches will be deleted and new matches will be generated.`,
+                    onConfirm: () => handleRemoveUser(user.userId)
+                  })}
+                  className="btn btn-danger btn-sm"
+                  title="Remove player"
+                >
+                  🗑️ Remove
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="tabs">
         <button
