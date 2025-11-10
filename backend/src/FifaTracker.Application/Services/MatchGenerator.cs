@@ -288,7 +288,7 @@ public class MatchGenerator : IMatchGenerator
         public string Key => GetTeammatePairKey(Player1, Player2);
     }
 
-    private string GetTeammatePairKey(Guid player1, Guid player2)
+    private static string GetTeammatePairKey(Guid player1, Guid player2)
     {
         var sorted = new[] { player1, player2 }.OrderBy(id => id).ToArray();
         return $"{sorted[0]}-{sorted[1]}";
