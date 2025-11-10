@@ -153,45 +153,146 @@ public class MatchGenerator : IMatchGenerator
         
         if (sortedPlayers.Count < 4)
             return null;
-        
-        // First pass: Try to find unique matchup
-        for (int i = 0; i < sortedPlayers.Count - 3; i++)
+
+        // Build a graph of who has played with whom
+        var playedWith = new Dictionary<Guid, HashSet<Guid>>();
+        foreach (var player in sortedPlayers)
         {
-            for (int j = i + 1; j < sortedPlayers.Count - 2; j++)
+            playedWith[player] = new HashSet<Guid>();
+        }
+
+        // Analyze existing matches and new matches to build the graph
+        foreach (var match in existingMatches.Concat(newMatches))
+        {
+            var team1Players = match.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList();
+            var team2Players = match.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList();
+
+            // Record teammates within each team
+            foreach (var player1 in team1Players)
             {
-                var team1 = new List<Guid> { sortedPlayers[i], sortedPlayers[j] };
-                
-                for (int k = 0; k < sortedPlayers.Count - 1; k++)
+                foreach (var player2 in team1Players)
                 {
-                    if (team1.Contains(sortedPlayers[k])) continue;
-                    
-                    for (int l = k + 1; l < sortedPlayers.Count; l++)
+                    if (player1 != player2)
                     {
-                        if (team1.Contains(sortedPlayers[l])) continue;
-                        
-                        var team2 = new List<Guid> { sortedPlayers[k], sortedPlayers[l] };
-                        
-                        if (TeamMatchupExists(team1, team2, existingMatches, newMatches))
-                            continue;
-                        
-                        return CreateTwoVsTwoMatch(sessionId, team1, team2, createdAt);
+                        playedWith[player1].Add(player2);
+                        playedWith[player2].Add(player1);
+                    }
+                }
+            }
+
+            foreach (var player1 in team2Players)
+            {
+                foreach (var player2 in team2Players)
+                {
+                    if (player1 != player2)
+                    {
+                        playedWith[player1].Add(player2);
+                        playedWith[player2].Add(player1);
                     }
                 }
             }
         }
-        
-        // Second pass: If no unique matchup found, shuffle players to create varied matchups
-        // Even with duplicates, we want different team compositions each time
-        if (sortedPlayers.Count >= 4)
+
+        // Find players who have played with the fewest others
+        var playersByUnplayedCount = sortedPlayers
+            .OrderByDescending(p => sortedPlayers.Count - playedWith[p].Count)
+            .ToList();
+
+        // First pass: Try to find a match where players haven't played together
+        foreach (var player1 in playersByUnplayedCount)
         {
-            var random = new Random();
-            var shuffledPlayers = sortedPlayers.OrderBy(_ => random.Next()).ToList();
-            var team1 = new List<Guid> { shuffledPlayers[0], shuffledPlayers[1] };
-            var team2 = new List<Guid> { shuffledPlayers[2], shuffledPlayers[3] };
-            return CreateTwoVsTwoMatch(sessionId, team1, team2, createdAt);
+            var potentialTeammates = playersByUnplayedCount
+                .Where(p => p != player1 && !playedWith[player1].Contains(p))
+                .ToList();
+
+            foreach (var player2 in potentialTeammates)
+            {
+                var remainingPlayers = playersByUnplayedCount
+                    .Where(p => p != player1 && p != player2)
+                    .ToList();
+
+                foreach (var player3 in remainingPlayers)
+                {
+                    var potentialTeammate4 = remainingPlayers
+                        .FirstOrDefault(p => p != player3 &&
+                                           !playedWith[player3].Contains(p) &&
+                                           !TeamMatchupExists(
+                                               new List<Guid> { player1, player2 },
+                                               new List<Guid> { player3, p },
+                                               existingMatches,
+                                               newMatches));
+
+                    if (potentialTeammate4 != null)
+                    {
+                        return CreateTwoVsTwoMatch(
+                            sessionId,
+                            new List<Guid> { player1, player2 },
+                            new List<Guid> { player3, potentialTeammate4 },
+                            createdAt);
+                    }
+                }
+            }
         }
-        
+
+        // Second pass: If all players have played with each other at least once,
+        // find the combination that has been used the least
+        var teamCombinationCounts = new Dictionary<string, int>();
+        foreach (var match in existingMatches.Concat(newMatches))
+        {
+            var team1 = string.Join(",", match.MatchTeams
+                .Where(mt => mt.TeamNumber == 1)
+                .Select(mt => mt.UserId)
+                .OrderBy(id => id));
+            var team2 = string.Join(",", match.MatchTeams
+                .Where(mt => mt.TeamNumber == 2)
+                .Select(mt => mt.UserId)
+                .OrderBy(id => id));
+            var key = $"{team1}|{team2}";
+            teamCombinationCounts[key] = teamCombinationCounts.GetValueOrDefault(key, 0) + 1;
+        }
+
+        // Generate all possible team combinations and find the least used one
+        var leastUsedTeams = GenerateLeastUsedTeamCombination(sortedPlayers, teamCombinationCounts);
+        if (leastUsedTeams != null)
+        {
+            return CreateTwoVsTwoMatch(sessionId, leastUsedTeams.Item1, leastUsedTeams.Item2, createdAt);
+        }
+
         return null;
+    }
+
+    private Tuple<List<Guid>, List<Guid>>? GenerateLeastUsedTeamCombination(
+        List<Guid> players,
+        Dictionary<string, int> teamCombinationCounts)
+    {
+        var minCount = int.MaxValue;
+        Tuple<List<Guid>, List<Guid>>? leastUsedTeams = null;
+
+        for (int i = 0; i < players.Count - 3; i++)
+        {
+            for (int j = i + 1; j < players.Count - 2; j++)
+            {
+                var team1 = new List<Guid> { players[i], players[j] };
+
+                for (int k = j + 1; k < players.Count - 1; k++)
+                {
+                    for (int l = k + 1; l < players.Count; l++)
+                    {
+                        var team2 = new List<Guid> { players[k], players[l] };
+                        var key = $"{string.Join(",", team1.OrderBy(id => id))}|{string.Join(",", team2.OrderBy(id => id))}";
+                        var count = teamCombinationCounts.GetValueOrDefault(key, 0);
+
+                        if (count < minCount)
+                        {
+                            minCount = count;
+                            leastUsedTeams = Tuple.Create(team1, team2);
+                        }
+                    }
+                }
+            }
+        }
+
+        return leastUsedTeams;
     }
     
     private Match CreateTwoVsTwoMatch(Guid sessionId, List<Guid> team1, List<Guid> team2, DateTime createdAt)
