@@ -201,9 +201,9 @@ public class MatchGenerator : IMatchGenerator
         if (players.Count < 4)
             return null;
 
-        // Get all existing teammate pairs from completed and new matches
+        // Get all existing teammate pairs from new matches only (to allow repeats after completion)
         var usedTeammatePairs = new HashSet<string>();
-        foreach (var match in existingMatches.Concat(newMatches))
+        foreach (var match in newMatches)
         {
             var team1Players = match.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList();
             var team2Players = match.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList();
@@ -250,8 +250,8 @@ public class MatchGenerator : IMatchGenerator
                     // Check if pairs don't share players
                     if (!pair1.Players.Intersect(pair2.Players).Any())
                     {
-                        // Check if any of the teams have already been used
-                        if (TeamsUsed(pair1.Players, pair2.Players, existingMatches, newMatches))
+                        // Check if any of the teams have already been used in new matches
+                        if (TeamsUsed(pair1.Players, pair2.Players, new List<Match>(), newMatches))
                             continue;
 
                         // Randomly assign which pair is team1 vs team2
@@ -291,9 +291,9 @@ public class MatchGenerator : IMatchGenerator
 
                 if (!pair1.Players.Intersect(pair2.Players).Any())
                 {
-                    // Check if this matchup already exists
-                    if (TeamMatchupExists(pair1.Players, pair2.Players, existingMatches, newMatches) ||
-                        TeamMatchupExists(pair2.Players, pair1.Players, existingMatches, newMatches))
+                    // Check if this matchup already exists in new matches
+                    if (TeamMatchupExists(pair1.Players, pair2.Players, new List<Match>(), newMatches) ||
+                        TeamMatchupExists(pair2.Players, pair1.Players, new List<Match>(), newMatches))
                         continue;
 
                     var random = new Random();
@@ -314,7 +314,7 @@ public class MatchGenerator : IMatchGenerator
         {
             var pair1 = allPairsWithUsage[allPairsWithUsage.Count - 1];
             var pair2 = allPairsWithUsage[allPairsWithUsage.Count - 2];
-            if (!TeamsUsed(pair1.Players, pair2.Players, existingMatches, newMatches))
+            if (!TeamsUsed(pair1.Players, pair2.Players, new List<Match>(), newMatches))
             {
                 return CreateTwoVsTwoMatch(sessionId, pair1.Players, pair2.Players, createdAt);
             }
