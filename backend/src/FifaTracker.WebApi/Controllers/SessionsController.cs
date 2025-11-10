@@ -2,6 +2,7 @@ using FifaTracker.Application.Sessions.Commands.AddUserToSession;
 using FifaTracker.Application.Sessions.Commands.CreateSession;
 using FifaTracker.Application.Sessions.Commands.EndSession;
 using FifaTracker.Application.Sessions.Commands.GenerateMoreMatches;
+using FifaTracker.Application.Sessions.Commands.RemoveUserFromSession;
 using FifaTracker.Application.Sessions.Queries.GetActiveSessions;
 using FifaTracker.Application.Sessions.Queries.GetAllSessions;
 using FifaTracker.Application.Sessions.Queries.GetSessionDetails;
@@ -61,6 +62,13 @@ public class SessionsController : ControllerBase
     public async Task<ActionResult> AddUser(Guid id, [FromBody] AddUserRequest request)
     {
         await _mediator.Send(new AddUserToSessionCommand(id, request.UserId));
+        return NoContent();
+    }
+
+    [HttpDelete("{id}/users/{userId}")]
+    public async Task<ActionResult> RemoveUser(Guid id, Guid userId)
+    {
+        await _mediator.Send(new RemoveUserFromSessionCommand(id, userId));
         return NoContent();
     }
 
