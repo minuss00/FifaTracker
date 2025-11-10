@@ -16,7 +16,10 @@ public class MatchGenerator : IMatchGenerator
         var matches = new List<Match>();
         var now = DateTime.UtcNow;
         
-        // Calculate player priorities
+        // Filter out unplayed matches from existingMatches
+        existingMatches = existingMatches.Where(m => m.IsCompleted).ToList();
+        
+        // Calculate player priorities based only on completed matches
         var playerStats = CalculatePlayerStats(userIds, existingMatches, userJoinTimes, sessionStartTime, now);
         
         // Generate matches based on type
