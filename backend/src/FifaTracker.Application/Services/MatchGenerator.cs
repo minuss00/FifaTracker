@@ -219,9 +219,8 @@ public class MatchGenerator : IMatchGenerator
                     // Check if pairs don't share players
                     if (!pair1.Players.Intersect(pair2.Players).Any())
                     {
-                        // Check if this team matchup already exists
-                        if (TeamMatchupExists(pair1.Players, pair2.Players, existingMatches, newMatches) ||
-                            TeamMatchupExists(pair2.Players, pair1.Players, existingMatches, newMatches))
+                        // Check if any of the teams have already been used
+                        if (TeamsUsed(pair1.Players, pair2.Players, existingMatches, newMatches))
                             continue;
 
                         // Randomly assign which pair is team1 vs team2
@@ -261,9 +260,8 @@ public class MatchGenerator : IMatchGenerator
 
                 if (!pair1.Players.Intersect(pair2.Players).Any())
                 {
-                    // Check if this team matchup already exists
-                    if (TeamMatchupExists(pair1.Players, pair2.Players, existingMatches, newMatches) ||
-                        TeamMatchupExists(pair2.Players, pair1.Players, existingMatches, newMatches))
+                    // Check if any of the teams have already been used
+                    if (TeamsUsed(pair1.Players, pair2.Players, existingMatches, newMatches))
                         continue;
 
                     var random = new Random();
@@ -284,7 +282,10 @@ public class MatchGenerator : IMatchGenerator
         {
             var pair1 = allPairsWithUsage[allPairsWithUsage.Count - 1];
             var pair2 = allPairsWithUsage[allPairsWithUsage.Count - 2];
-            return CreateTwoVsTwoMatch(sessionId, pair1.Players, pair2.Players, createdAt);
+            if (!TeamsUsed(pair1.Players, pair2.Players, existingMatches, newMatches))
+            {
+                return CreateTwoVsTwoMatch(sessionId, pair1.Players, pair2.Players, createdAt);
+            }
         }
 
         return null;
@@ -505,6 +506,27 @@ public class MatchGenerator : IMatchGenerator
             m.MatchTeams.Any(mt => mt.UserId == player2));
     }
 
+    private static string GetTeamKey(List<Guid> team)
+    {
+        return string.Join(",", team.OrderBy(id => id));
+    }
+
+    private bool TeamsUsed(List<Guid> team1, List<Guid> team2, List<Match> existing, List<Match> newMatches)
+    {
+        var allMatches = existing.Concat(newMatches);
+        var team1Key = GetTeamKey(team1);
+        var team2Key = GetTeamKey(team2);
+        return allMatches.Any(m =>
+        {
+            var t1 = m.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList();
+            var t2 = m.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList();
+            if (t1.Count != 2 || t2.Count != 2) return false;
+            var t1Key = GetTeamKey(t1);
+            var t2Key = GetTeamKey(t2);
+            return t1Key == team1Key || t1Key == team2Key || t2Key == team1Key || t2Key == team2Key;
+        });
+    }
+
     private bool TeamMatchupExists(List<Guid> team1, List<Guid> team2, List<Match> existing, List<Match> newMatches)
     {
         var allMatches = existing.Concat(newMatches);
@@ -512,11 +534,11 @@ public class MatchGenerator : IMatchGenerator
         {
             var team1Players = m.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList();
             var team2Players = m.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList();
-            
+
             // Check if team sizes match first
             if (team1Players.Count != team1.Count || team2Players.Count != team2.Count)
                 return false;
-            
+
             // Check if teams match (considering both orientations)
             return (team1.All(id => team1Players.Contains(id)) && team1Players.Count == team1.Count &&
                     team2.All(id => team2Players.Contains(id)) && team2Players.Count == team2.Count) ||
