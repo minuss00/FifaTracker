@@ -29,7 +29,10 @@ public class GetSessionDetailsQueryHandler : IRequestHandler<GetSessionDetailsQu
         var users = session.SessionUsers.Select(su => new SessionUserDto(
             su.UserId,
             su.User.Name,
-            su.JoinedAt
+            su.JoinedAt,
+            su.IsActiveInSession,
+            su.PausedAt,
+            su.TotalActiveTime
         )).ToList();
 
         var matches = session.Matches.Select(m => new MatchDto(

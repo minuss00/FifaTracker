@@ -57,27 +57,25 @@ public class AddUserToSessionCommandHandler : IRequestHandler<AddUserToSessionCo
         }
 
         // Get all users including the new one
-        var allUserIds = session.SessionUsers.Select(su => su.UserId).ToList();
-        allUserIds.Add(request.UserId); // Include the new user
+        var allSessionUsers = session.SessionUsers.ToList();
+        allSessionUsers.Add(sessionUser);
+        
+        var allUserIds = allSessionUsers.Select(su => su.UserId).ToList();
         
         // Get remaining matches (completed + custom pending)
         var existingMatches = await _context.Matches
             .Where(m => m.SessionId == request.SessionId && (m.IsCompleted || !m.IsGenerated))
             .Include(m => m.MatchTeams)
             .ToListAsync(cancellationToken);
-
-        // Build user join times dictionary
-        var userJoinTimes = session.SessionUsers.ToDictionary(su => su.UserId, su => su.JoinedAt);
-        userJoinTimes[request.UserId] = DateTime.UtcNow;
         
-        // Generate 5 new matches considering all users and their join times
+        // Generate 5 new matches considering all users and their activity
         var newMatches = _matchGenerator.GenerateSmartMatches(
             session.Id,
             allUserIds,
+            allSessionUsers,
             session.MatchType,
             5, // Always generate 5 pending matches
             existingMatches,
-            userJoinTimes,
             session.StartDate);
 
         foreach (var match in newMatches)

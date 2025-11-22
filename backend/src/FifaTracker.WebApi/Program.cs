@@ -2,6 +2,7 @@ using FifaTracker.Application;
 using FifaTracker.Infrastructure;
 using FifaTracker.Infrastructure.Persistence;
 using FifaTracker.WebApi.Extensions;
+using FifaTracker.WebApi.Middleware;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
 
@@ -71,6 +72,9 @@ app.Use(async (context, next) =>
 app.UseHttpsRedirection();
 
 app.UseAuthorization();
+
+// Session activity tracking middleware
+app.UseMiddleware<SessionActivityMiddleware>();
 
 app.MapControllers();
 

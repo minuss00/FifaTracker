@@ -79,6 +79,7 @@ public class CreateSessionCommandHandler : IRequestHandler<CreateSessionCommand,
         _context.Sessions.Add(session);
 
         // Add users to session
+        var sessionUsers = new List<SessionUser>();
         foreach (var userId in request.UserIds)
         {
             var sessionUser = new SessionUser
@@ -88,17 +89,17 @@ public class CreateSessionCommandHandler : IRequestHandler<CreateSessionCommand,
                 JoinedAt = DateTime.UtcNow
             };
             _context.SessionUsers.Add(sessionUser);
+            sessionUsers.Add(sessionUser);
         }
 
         // Generate initial 5 matches using smart generation
-        var userJoinTimes = request.UserIds.ToDictionary(id => id, id => DateTime.UtcNow);
         var matches = _matchGenerator.GenerateSmartMatches(
             session.Id, 
-            request.UserIds, 
+            request.UserIds,
+            sessionUsers,
             request.MatchType, 
             5, // Target 5 matches on session start
-            new List<Match>(), 
-            userJoinTimes, 
+            new List<Match>(),
             session.StartDate);
         
         foreach (var match in matches)

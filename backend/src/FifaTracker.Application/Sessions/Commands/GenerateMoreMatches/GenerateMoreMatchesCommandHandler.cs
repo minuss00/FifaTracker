@@ -33,16 +33,28 @@ public class GenerateMoreMatchesCommandHandler : IRequestHandler<GenerateMoreMat
             .Include(m => m.MatchTeams)
             .ToListAsync(cancellationToken);
 
-        var userIds = session.SessionUsers.Select(su => su.UserId).ToList();
-        var userJoinTimes = session.SessionUsers.ToDictionary(su => su.UserId, su => su.JoinedAt);
+        // Remove all pending generated matches before generating new ones
+        var pendingGeneratedMatches = existingMatches
+            .Where(m => !m.IsCompleted && m.IsGenerated)
+            .ToList();
+        
+        foreach (var match in pendingGeneratedMatches)
+        {
+            _context.Matches.Remove(match);
+            existingMatches.Remove(match); // Update list for generator
+        }
+
+        // Only generate for active users
+        var activeSessionUsers = session.SessionUsers.Where(su => su.IsActiveInSession).ToList();
+        var activeUserIds = activeSessionUsers.Select(su => su.UserId).ToList();
 
         var newMatches = _matchGenerator.GenerateSmartMatches(
             session.Id,
-            userIds,
+            activeUserIds,
+            activeSessionUsers,
             session.MatchType,
             request.TargetCount,
             existingMatches,
-            userJoinTimes,
             session.StartDate);
 
         foreach (var match in newMatches)

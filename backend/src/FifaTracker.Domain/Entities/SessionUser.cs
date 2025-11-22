@@ -10,4 +10,10 @@ public class SessionUser
     public User User { get; set; } = null!;
 
     public DateTime JoinedAt { get; set; }
+    
+    // Activity tracking
+    public bool IsActiveInSession { get; set; } = true;
+    public DateTime? PausedAt { get; set; }
+    public DateTime? LastResumedAt { get; set; }
+    public TimeSpan TotalActiveTime { get; set; } = TimeSpan.Zero;
 }

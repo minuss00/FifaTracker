@@ -6,10 +6,10 @@ public interface IMatchGenerator
 {
     List<Match> GenerateSmartMatches(
         Guid sessionId, 
-        List<Guid> userIds, 
+        List<Guid> userIds,
+        List<SessionUser> sessionUsers,
         FifaTracker.Domain.Entities.MatchType matchType,
         int targetCount,
         List<Match> existingMatches,
-        Dictionary<Guid, DateTime> userJoinTimes,
         DateTime sessionStartTime);
 }

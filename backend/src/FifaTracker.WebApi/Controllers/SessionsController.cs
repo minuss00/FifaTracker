@@ -2,9 +2,12 @@ using FifaTracker.Application.Sessions.Commands.AddUserToSession;
 using FifaTracker.Application.Sessions.Commands.CreateSession;
 using FifaTracker.Application.Sessions.Commands.EndSession;
 using FifaTracker.Application.Sessions.Commands.GenerateMoreMatches;
+using FifaTracker.Application.Sessions.Commands.PauseUserInSession;
+using FifaTracker.Application.Sessions.Commands.ResumeUserInSession;
 using FifaTracker.Application.Sessions.Queries.GetActiveSessions;
 using FifaTracker.Application.Sessions.Queries.GetAllSessions;
 using FifaTracker.Application.Sessions.Queries.GetSessionDetails;
+using FifaTracker.WebApi.Attributes;
 using FifaTracker.WebApi.Requests;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -58,6 +61,7 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPost("{id}/users")]
+    [UpdateSessionActivity]
     public async Task<ActionResult> AddUser(Guid id, [FromBody] AddUserRequest request)
     {
         await _mediator.Send(new AddUserToSessionCommand(id, request.UserId));
@@ -65,6 +69,7 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPost("{id}/generate-matches")]
+    [UpdateSessionActivity]
     public async Task<ActionResult<int>> GenerateMoreMatches(Guid id, [FromBody] GenerateMatchesRequest? request)
     {
         var count = await _mediator.Send(new GenerateMoreMatchesCommand 
@@ -73,5 +78,21 @@ public class SessionsController : ControllerBase
             TargetCount = request?.TargetCount ?? 5 
         });
         return Ok(new { generatedCount = count });
+    }
+
+    [HttpPost("{id}/users/{userId}/pause")]
+    [UpdateSessionActivity]
+    public async Task<IActionResult> PauseUser(Guid id, Guid userId)
+    {
+        await _mediator.Send(new PauseUserInSessionCommand(id, userId));
+        return NoContent();
+    }
+
+    [HttpPost("{id}/users/{userId}/resume")]
+    [UpdateSessionActivity]
+    public async Task<IActionResult> ResumeUser(Guid id, Guid userId)
+    {
+        await _mediator.Send(new ResumeUserInSessionCommand(id, userId));
+        return NoContent();
     }
 }

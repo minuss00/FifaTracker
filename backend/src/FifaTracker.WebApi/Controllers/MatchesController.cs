@@ -1,6 +1,7 @@
 using FifaTracker.Application.Matches.Commands.CreateCustomMatch;
 using FifaTracker.Application.Matches.Commands.DeleteMatch;
 using FifaTracker.Application.Matches.Commands.UpdateMatchScore;
+using FifaTracker.WebApi.Attributes;
 using FifaTracker.WebApi.Requests;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -26,6 +27,7 @@ public class MatchesController : ControllerBase
     }
 
     [HttpPut("{id}/score")]
+    [UpdateSessionActivity(IsMatchIdParameter = true)]
     public async Task<ActionResult> UpdateScore(Guid id, [FromBody] UpdateScoreRequest request)
     {
         await _mediator.Send(new UpdateMatchScoreCommand(id, request.Team1Score, request.Team2Score));

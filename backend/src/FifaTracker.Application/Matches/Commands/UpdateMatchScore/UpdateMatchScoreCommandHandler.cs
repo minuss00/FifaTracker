@@ -34,7 +34,7 @@ public class UpdateMatchScoreCommandHandler : IRequestHandler<UpdateMatchScoreCo
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        // Auto-generate new matches if pending count is below 5
+        // Replace all pending generated matches with fresh ones based on current priorities
         if (match.Session.Status == Domain.Entities.SessionStatus.Active)
         {
             var allMatches = await _context.Matches
@@ -42,32 +42,39 @@ public class UpdateMatchScoreCommandHandler : IRequestHandler<UpdateMatchScoreCo
                 .Include(m => m.MatchTeams)
                 .ToListAsync(cancellationToken);
 
-            var pendingGeneratedMatches = allMatches.Where(m => !m.IsCompleted && m.IsGenerated).Count();
-
-            if (pendingGeneratedMatches < 5)
+            // Remove all pending generated matches
+            var pendingGeneratedMatches = allMatches
+                .Where(m => !m.IsCompleted && m.IsGenerated)
+                .ToList();
+            
+            foreach (var pendingMatch in pendingGeneratedMatches)
             {
-                var matchesToGenerate = 5 - pendingGeneratedMatches;
-                var userIds = match.Session.SessionUsers.Select(su => su.UserId).ToList();
-                var userJoinTimes = match.Session.SessionUsers.ToDictionary(su => su.UserId, su => su.JoinedAt);
+                _context.Matches.Remove(pendingMatch);
+                allMatches.Remove(pendingMatch); // Update list for generator
+            }
 
-                var newMatches = _matchGenerator.GenerateSmartMatches(
-                    match.SessionId,
-                    userIds,
-                    match.Session.MatchType,
-                    matchesToGenerate,
-                    allMatches,
-                    userJoinTimes,
-                    match.Session.StartDate);
+            // Only generate for active users
+            var activeSessionUsers = match.Session.SessionUsers.Where(su => su.IsActiveInSession).ToList();
+            var activeUserIds = activeSessionUsers.Select(su => su.UserId).ToList();
 
-                foreach (var newMatch in newMatches)
-                {
-                    _context.Matches.Add(newMatch);
-                }
+            // Generate 5 fresh matches based on current priorities
+            var newMatches = _matchGenerator.GenerateSmartMatches(
+                match.SessionId,
+                activeUserIds,
+                activeSessionUsers,
+                match.Session.MatchType,
+                5, // Always generate 5
+                allMatches,
+                match.Session.StartDate);
 
-                if (newMatches.Count > 0)
-                {
-                    await _context.SaveChangesAsync(cancellationToken);
-                }
+            foreach (var newMatch in newMatches)
+            {
+                _context.Matches.Add(newMatch);
+            }
+
+            if (newMatches.Count > 0)
+            {
+                await _context.SaveChangesAsync(cancellationToken);
             }
         }
 

@@ -1,4 +1,5 @@
 using FifaTracker.Domain.Entities;
+using FifaTracker.Domain.Extensions;
 
 namespace FifaTracker.Application.Services;
 
@@ -7,17 +8,17 @@ public class MatchGenerator : IMatchGenerator
     public List<Match> GenerateSmartMatches(
         Guid sessionId,
         List<Guid> userIds,
+        List<SessionUser> sessionUsers,
         FifaTracker.Domain.Entities.MatchType matchType,
         int targetCount,
         List<Match> existingMatches,
-        Dictionary<Guid, DateTime> userJoinTimes,
         DateTime sessionStartTime)
     {
         var matches = new List<Match>();
         var now = DateTime.UtcNow;
         
-        // Calculate player priorities
-        var playerStats = CalculatePlayerStats(userIds, existingMatches, userJoinTimes, sessionStartTime, now);
+        // Calculate player priorities based on actual active time
+        var playerStats = CalculatePlayerStats(userIds, sessionUsers, existingMatches, sessionStartTime, now);
         
         // Generate matches based on type
         for (int i = 0; i < targetCount; i++)
@@ -49,8 +50,8 @@ public class MatchGenerator : IMatchGenerator
 
     private Dictionary<Guid, PlayerMatchStats> CalculatePlayerStats(
         List<Guid> userIds,
+        List<SessionUser> sessionUsers,
         List<Match> existingMatches,
-        Dictionary<Guid, DateTime> userJoinTimes,
         DateTime sessionStartTime,
         DateTime now)
     {
@@ -59,9 +60,13 @@ public class MatchGenerator : IMatchGenerator
         
         foreach (var userId in userIds)
         {
-            var joinTime = userJoinTimes.ContainsKey(userId) ? userJoinTimes[userId] : sessionStartTime;
-            var timeInSession = (now - joinTime).TotalHours;
-            var timeRatio = sessionDuration > 0 ? timeInSession / sessionDuration : 1.0;
+            var sessionUser = sessionUsers.FirstOrDefault(su => su.UserId == userId);
+            if (sessionUser == null)
+                continue;
+            
+            // Use actual active time instead of just time since join
+            var activeTime = sessionUser.GetCurrentActiveTotalHours(now);
+            var activityRatio = sessionDuration > 0 ? activeTime / sessionDuration : 1.0;
             
             // Count matches for this player (including custom)
             var playerMatches = existingMatches
@@ -71,22 +76,43 @@ public class MatchGenerator : IMatchGenerator
             var completedCount = playerMatches.Count(m => m.IsCompleted);
             var pendingCount = playerMatches.Count(m => !m.IsCompleted);
             
-            // Calculate expected matches based on time in session
-            var averageMatches = existingMatches.Count > 0 
-                ? existingMatches.SelectMany(m => m.MatchTeams).GroupBy(mt => mt.UserId).Average(g => g.Count())
-                : 0;
-            var expectedMatches = averageMatches * timeRatio;
+            // Calculate expected matches based on ACTUAL ACTIVE TIME
+            // Calculate matches per hour rate from completed matches
+            var completedMatches = existingMatches.Where(m => m.IsCompleted).ToList();
             
+            double matchesPerHour = 0;
+            if (completedMatches.Count > 0)
+            {
+                // Calculate total active hours for all players who have completed matches
+                var totalActiveHours = sessionUsers
+                    .Where(su => completedMatches.Any(m => m.MatchTeams.Any(mt => mt.UserId == su.UserId)))
+                    .Sum(su => su.GetCurrentActiveTotalHours(now));
+                
+                // Total matches played by all players
+                var totalMatchesPlayed = completedMatches.SelectMany(m => m.MatchTeams).Count();
+                
+                // Matches per hour rate
+                if (totalActiveHours > 0)
+                {
+                    matchesPerHour = totalMatchesPlayed / totalActiveHours;
+                }
+            }
+            
+            // Expected matches = player's active time × matches per hour rate
+            var expectedMatches = activeTime * matchesPerHour;
+            
+            // Priority based ONLY on completed matches vs expected
+            // Pending matches are ignored in priority calculation
             stats[userId] = new PlayerMatchStats
             {
                 UserId = userId,
                 TotalMatches = completedCount + pendingCount,
                 CompletedMatches = completedCount,
                 PendingMatches = pendingCount,
-                TimeInSession = timeInSession,
-                TimeRatio = timeRatio,
+                TimeInSession = activeTime,
+                TimeRatio = activityRatio,
                 ExpectedMatches = expectedMatches,
-                Priority = expectedMatches - (completedCount + pendingCount),
+                Priority = expectedMatches - completedCount, // Only completed matches count!
                 Teammates = new HashSet<Guid>(),
                 Opponents = new HashSet<Guid>()
             };

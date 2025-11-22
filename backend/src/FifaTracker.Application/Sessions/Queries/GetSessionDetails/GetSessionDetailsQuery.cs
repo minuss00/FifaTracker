@@ -16,7 +16,14 @@ public record SessionDetailsDto(
     List<MatchDto> Matches
 );
 
-public record SessionUserDto(Guid UserId, string UserName, DateTime JoinedAt);
+public record SessionUserDto(
+    Guid UserId, 
+    string UserName, 
+    DateTime JoinedAt,
+    bool IsActiveInSession,
+    DateTime? PausedAt,
+    TimeSpan TotalActiveTime
+);
 
 public record MatchDto(
     Guid Id,

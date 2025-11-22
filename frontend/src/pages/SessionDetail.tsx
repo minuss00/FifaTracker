@@ -28,7 +28,7 @@ function SessionDetail() {
   const [customMatchError, setCustomMatchError] = useState<string | null>(null);
   const [showAddUser, setShowAddUser] = useState(false);
   const [showCustomMatch, setShowCustomMatch] = useState(false);
-  const [activeTab, setActiveTab] = useState<'matches' | 'leaderboard'>('matches');
+  const [activeTab, setActiveTab] = useState<'matches' | 'leaderboard' | 'players'>('matches');
   const [leaderboardMode, setLeaderboardMode] = useState<'standard' | 'effectiveness'>('standard');
   const [showCompleted, setShowCompleted] = useState(true);
   const [showPending, setShowPending] = useState(true);
@@ -74,6 +74,54 @@ function SessionDetail() {
     } catch (err) {
       console.error('Failed to load users:', err);
     }
+  };
+
+  const handlePauseUser = async (userId: string) => {
+    if (!id) return;
+    try {
+      await sessionsApi.pauseUser(id, userId);
+      loadSession();
+    } catch (err: any) {
+      console.error('Failed to pause user:', err);
+    }
+  };
+
+  const handleResumeUser = async (userId: string) => {
+    if (!id) return;
+    try {
+      await sessionsApi.resumeUser(id, userId);
+      loadSession();
+    } catch (err: any) {
+      console.error('Failed to resume user:', err);
+    }
+  };
+
+  const formatDuration = (timeSpan: string): string => {
+    // TimeSpan format from C#: "HH:MM:SS" or "D.HH:MM:SS"
+    const parts = timeSpan.split(':');
+    if (parts.length < 2) return '0m';
+    
+    let hours = 0;
+    let minutes = 0;
+    
+    if (parts.length === 3) {
+      // Check if first part contains days
+      const firstPart = parts[0];
+      if (firstPart.includes('.')) {
+        const [days, hrs] = firstPart.split('.');
+        hours = parseInt(days) * 24 + parseInt(hrs);
+      } else {
+        hours = parseInt(firstPart);
+      }
+      minutes = parseInt(parts[1]);
+    } else {
+      minutes = parseInt(parts[0]);
+    }
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
   };
 
   const handleUpdateScore = async (matchId: string, team1Score: number, team2Score: number) => {
@@ -434,7 +482,7 @@ function SessionDetail() {
             <div className="team-column">
               <h4>Team 1 ({customMatch.team1.length} {customMatch.team1.length === 1 ? 'player' : 'players'})</h4>
               <div className="player-checkboxes">
-                {session.users.map((user) => (
+                {session.users.filter(u => u.isActiveInSession).map((user) => (
                   <label 
                     key={user.userId} 
                     className={`player-checkbox ${customMatch.team2.includes(user.userId) ? 'disabled' : ''}`}
@@ -453,7 +501,7 @@ function SessionDetail() {
             <div className="team-column">
               <h4>Team 2 ({customMatch.team2.length} {customMatch.team2.length === 1 ? 'player' : 'players'})</h4>
               <div className="player-checkboxes">
-                {session.users.map((user) => (
+                {session.users.filter(u => u.isActiveInSession).map((user) => (
                   <label 
                     key={user.userId} 
                     className={`player-checkbox ${customMatch.team1.includes(user.userId) ? 'disabled' : ''}`}
@@ -498,9 +546,59 @@ function SessionDetail() {
         >
           Leaderboard
         </button>
+        <button
+          className={`tab ${activeTab === 'players' ? 'active' : ''}`}
+          onClick={() => setActiveTab('players')}
+        >
+          Players ({session.users.length})
+        </button>
       </div>
 
-      {activeTab === 'matches' ? (
+      {activeTab === 'players' ? (
+        <div className="session-content">
+          <div className="players-section-tab full-width">
+            <div className="players-list">
+              {session.users.map((user) => (
+                <div 
+                  key={user.userId} 
+                  className={`player-item ${user.isActiveInSession ? 'active' : 'paused'}`}
+                >
+                  <div className="player-info">
+                    <span className="player-status-icon">
+                      {user.isActiveInSession ? '✅' : '⏸️'}
+                    </span>
+                    <span className="player-name">{user.userName}</span>
+                    <span className="player-time" title="Total active time">
+                      ⏱️ {formatDuration(user.totalActiveTime)}
+                    </span>
+                  </div>
+                  {session.status === 'Active' && (
+                    <div className="player-actions">
+                      {user.isActiveInSession ? (
+                        <button 
+                          onClick={() => handlePauseUser(user.userId)}
+                          className="btn btn-warning btn-sm"
+                          title="Pause player"
+                        >
+                          ⏸️ Pause
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={() => handleResumeUser(user.userId)}
+                          className="btn btn-success btn-sm"
+                          title="Resume player"
+                        >
+                          ▶️ Resume
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : activeTab === 'matches' ? (
         <div className="session-content">
           <div className="matches-section full-width">
             <div className="matches-controls">

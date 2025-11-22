@@ -64,6 +64,9 @@ export interface SessionUser {
   userId: string;
   userName: string;
   joinedAt: string;
+  isActiveInSession: boolean;
+  pausedAt?: string;
+  totalActiveTime: string; // TimeSpan serialized as "HH:MM:SS"
 }
 
 export interface Match {
@@ -120,6 +123,10 @@ export const sessionsApi = {
     api.post(`/sessions/${id}/users`, { UserId: userId }),
   generateMoreMatches: (id: string, targetCount: number = 5) =>
     api.post<{ generatedCount: number }>(`/sessions/${id}/generate-matches`, { TargetCount: targetCount }),
+  pauseUser: (id: string, userId: string) =>
+    api.post(`/sessions/${id}/users/${userId}/pause`),
+  resumeUser: (id: string, userId: string) =>
+    api.post(`/sessions/${id}/users/${userId}/resume`),
 };
 
 // Matches API
