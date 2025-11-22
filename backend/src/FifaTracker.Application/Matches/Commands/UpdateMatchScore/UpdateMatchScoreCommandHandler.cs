@@ -34,37 +34,21 @@ public class UpdateMatchScoreCommandHandler : IRequestHandler<UpdateMatchScoreCo
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        // Replace all pending generated matches with fresh ones based on current priorities
         if (match.Session.Status == Domain.Entities.SessionStatus.Active)
         {
-            var allMatches = await _context.Matches
-                .Where(m => m.SessionId == match.SessionId)
-                .Include(m => m.MatchTeams)
-                .ToListAsync(cancellationToken);
+            var existingMatches = await _context.GetMatchesForSessionAsync(match.SessionId, cancellationToken);
+            _context.RemovePendingGeneratedMatches(existingMatches);
 
-            // Remove all pending generated matches
-            var pendingGeneratedMatches = allMatches
-                .Where(m => !m.IsCompleted && m.IsGenerated)
-                .ToList();
-            
-            foreach (var pendingMatch in pendingGeneratedMatches)
-            {
-                _context.Matches.Remove(pendingMatch);
-                allMatches.Remove(pendingMatch); // Update list for generator
-            }
-
-            // Only generate for active users
             var activeSessionUsers = match.Session.SessionUsers.Where(su => su.IsActiveInSession).ToList();
             var activeUserIds = activeSessionUsers.Select(su => su.UserId).ToList();
 
-            // Generate 5 fresh matches based on current priorities
             var newMatches = _matchGenerator.GenerateSmartMatches(
                 match.SessionId,
                 activeUserIds,
                 activeSessionUsers,
                 match.Session.MatchType,
-                5, // Always generate 5
-                allMatches,
+                5,
+                existingMatches,
                 match.Session.StartDate);
 
             foreach (var newMatch in newMatches)

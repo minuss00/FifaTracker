@@ -27,7 +27,7 @@ public class AddUserToSessionCommandHandler : IRequestHandler<AddUserToSessionCo
             throw new KeyNotFoundException($"Session with ID {request.SessionId} not found");
 
         // Check if user exists and is active
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
         if (user == null)
             throw new KeyNotFoundException($"User with ID {request.UserId} not found");
         if (!user.IsActive)

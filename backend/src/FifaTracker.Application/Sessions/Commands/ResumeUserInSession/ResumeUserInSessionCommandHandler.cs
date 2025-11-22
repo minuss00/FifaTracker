@@ -32,43 +32,33 @@ public class ResumeUserInSessionCommandHandler : IRequestHandler<ResumeUserInSes
         if (sessionUser.IsActiveInSession)
             throw new InvalidOperationException("User is already active");
 
-        // Resume user
+        var now = DateTime.UtcNow;
         sessionUser.IsActiveInSession = true;
-        sessionUser.LastResumedAt = DateTime.UtcNow;
+        sessionUser.LastResumedAt = now;
         sessionUser.PausedAt = null;
 
-        // Remove all pending generated matches
-        var pendingGeneratedMatches = await _context.Matches
-            .Where(m => m.SessionId == request.SessionId && !m.IsCompleted && m.IsGenerated)
-            .ToListAsync(cancellationToken);
+        var existingMatches = await _context.GetMatchesForSessionAsync(request.SessionId, cancellationToken);
+        _context.RemovePendingGeneratedMatches(existingMatches);
 
-        foreach (var match in pendingGeneratedMatches)
+        var activeSessionUsers = session.SessionUsers.Where(su => su.IsActiveInSession).ToList();
+        var activeUserIds = activeSessionUsers.Select(su => su.UserId).ToList();
+
+        var minPlayers = session.MatchType switch
         {
-            _context.Matches.Remove(match);
-        }
+            Domain.Entities.MatchType.OneVsOne => 2,
+            Domain.Entities.MatchType.TwoVsOne => 3,
+            _ => 4
+        };
 
-        // Get completed and custom matches
-        var completedAndCustomMatches = await _context.Matches
-            .Where(m => m.SessionId == request.SessionId && (m.IsCompleted || !m.IsGenerated))
-            .Include(m => m.MatchTeams)
-            .ToListAsync(cancellationToken);
-
-        var activeUserIds = session.SessionUsers
-            .Where(su => su.IsActiveInSession)
-            .Select(su => su.UserId)
-            .ToList();
-
-        // Regenerate 5 matches including the resumed user
-        if (activeUserIds.Count >= (session.MatchType == Domain.Entities.MatchType.OneVsOne ? 2 :
-                                     session.MatchType == Domain.Entities.MatchType.TwoVsOne ? 3 : 4))
+        if (activeUserIds.Count >= minPlayers)
         {
             var newMatches = _matchGenerator.GenerateSmartMatches(
                 session.Id,
                 activeUserIds,
-                session.SessionUsers.ToList(),
+                activeSessionUsers,
                 session.MatchType,
                 5,
-                completedAndCustomMatches,
+                existingMatches,
                 session.StartDate);
 
             foreach (var match in newMatches)
@@ -77,7 +67,7 @@ public class ResumeUserInSessionCommandHandler : IRequestHandler<ResumeUserInSes
             }
         }
 
-        session.LastModifiedAt = DateTime.UtcNow;
+        session.LastModifiedAt = now;
         await _context.SaveChangesAsync(cancellationToken);
 
         return Unit.Value;

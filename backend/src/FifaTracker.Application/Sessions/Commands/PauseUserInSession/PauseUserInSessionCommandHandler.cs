@@ -33,60 +33,38 @@ public class PauseUserInSessionCommandHandler : IRequestHandler<PauseUserInSessi
         if (!sessionUser.IsActiveInSession)
             throw new InvalidOperationException("User is already paused");
 
-        // Snapshot current active time before pausing
-        sessionUser.SnapshotActiveTime(DateTime.UtcNow);
+        var now = DateTime.UtcNow;
+        sessionUser.SnapshotActiveTime(now);
         sessionUser.IsActiveInSession = false;
-        sessionUser.PausedAt = DateTime.UtcNow;
+        sessionUser.PausedAt = now;
 
-        // Remove all pending generated matches involving this user
-        var pendingGeneratedMatches = await _context.Matches
-            .Where(m => m.SessionId == request.SessionId && !m.IsCompleted && m.IsGenerated)
-            .Include(m => m.MatchTeams)
-            .ToListAsync(cancellationToken);
-
-        var matchesToRemove = pendingGeneratedMatches
-            .Where(m => m.MatchTeams.Any(mt => mt.UserId == request.UserId))
-            .ToList();
-
-        foreach (var match in matchesToRemove)
-        {
-            _context.Matches.Remove(match);
-        }
-
-        // Get remaining matches and active users
-        var remainingMatches = pendingGeneratedMatches.Except(matchesToRemove).ToList();
-        var completedAndCustomMatches = await _context.Matches
-            .Where(m => m.SessionId == request.SessionId && (m.IsCompleted || !m.IsGenerated))
-            .Include(m => m.MatchTeams)
-            .ToListAsync(cancellationToken);
-
-        var allExistingMatches = completedAndCustomMatches.Concat(remainingMatches).ToList();
+        var existingMatches = await _context.GetMatchesForSessionAsync(request.SessionId, cancellationToken);
+        _context.RemovePendingGeneratedMatchesWithUser(existingMatches, request.UserId);
         
-        var activeUserIds = session.SessionUsers
-            .Where(su => su.IsActiveInSession)
-            .Select(su => su.UserId)
-            .ToList();
+        var activeSessionUsers = session.SessionUsers.Where(su => su.IsActiveInSession).ToList();
+        var activeUserIds = activeSessionUsers.Select(su => su.UserId).ToList();
 
-        // Regenerate matches for active users only
-        if (activeUserIds.Count >= (session.MatchType == Domain.Entities.MatchType.OneVsOne ? 2 : 
-                                     session.MatchType == Domain.Entities.MatchType.TwoVsOne ? 3 : 4))
+        var minPlayers = session.MatchType switch
         {
-            var targetCount = 5 - remainingMatches.Count;
-            if (targetCount > 0)
-            {
-                var newMatches = _matchGenerator.GenerateSmartMatches(
-                    session.Id,
-                    activeUserIds,
-                    session.SessionUsers.ToList(),
-                    session.MatchType,
-                    targetCount,
-                    allExistingMatches,
-                    session.StartDate);
+            Domain.Entities.MatchType.OneVsOne => 2,
+            Domain.Entities.MatchType.TwoVsOne => 3,
+            _ => 4
+        };
 
-                foreach (var match in newMatches)
-                {
-                    _context.Matches.Add(match);
-                }
+        if (activeUserIds.Count >= minPlayers)
+        {
+            var newMatches = _matchGenerator.GenerateSmartMatches(
+                session.Id,
+                activeUserIds,
+                activeSessionUsers,
+                session.MatchType,
+                5,
+                existingMatches,
+                session.StartDate);
+
+            foreach (var match in newMatches)
+            {
+                _context.Matches.Add(match);
             }
         }
 

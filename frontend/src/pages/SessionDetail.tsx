@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { sessionsApi, matchesApi, usersApi, type SessionDetails, type User } from '../services/api';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import PlayerItem from '../components/PlayerItem';
+import TeamSelector from '../components/TeamSelector';
 import './SessionDetail.css';
 
 interface SessionLeaderboardEntry {
@@ -94,34 +96,6 @@ function SessionDetail() {
     } catch (err: any) {
       console.error('Failed to resume user:', err);
     }
-  };
-
-  const formatDuration = (timeSpan: string): string => {
-    // TimeSpan format from C#: "HH:MM:SS" or "D.HH:MM:SS"
-    const parts = timeSpan.split(':');
-    if (parts.length < 2) return '0m';
-    
-    let hours = 0;
-    let minutes = 0;
-    
-    if (parts.length === 3) {
-      // Check if first part contains days
-      const firstPart = parts[0];
-      if (firstPart.includes('.')) {
-        const [days, hrs] = firstPart.split('.');
-        hours = parseInt(days) * 24 + parseInt(hrs);
-      } else {
-        hours = parseInt(firstPart);
-      }
-      minutes = parseInt(parts[1]);
-    } else {
-      minutes = parseInt(parts[0]);
-    }
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
   };
 
   const handleUpdateScore = async (matchId: string, team1Score: number, team2Score: number) => {
@@ -478,46 +452,12 @@ function SessionDetail() {
         <div className="modal-form">
           {customMatchError && <div className="error-message">{customMatchError}</div>}
           <p className="form-hint">Select players for each team. Teams don't need to be balanced.</p>
-          <div className="team-selection">
-            <div className="team-column">
-              <h4>Team 1 ({customMatch.team1.length} {customMatch.team1.length === 1 ? 'player' : 'players'})</h4>
-              <div className="player-checkboxes">
-                {session.users.filter(u => u.isActiveInSession).map((user) => (
-                  <label 
-                    key={user.userId} 
-                    className={`player-checkbox ${customMatch.team2.includes(user.userId) ? 'disabled' : ''}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={customMatch.team1.includes(user.userId)}
-                      onChange={() => togglePlayerInTeam(user.userId, 'team1')}
-                      disabled={customMatch.team2.includes(user.userId)}
-                    />
-                    <span>{user.userName}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="team-column">
-              <h4>Team 2 ({customMatch.team2.length} {customMatch.team2.length === 1 ? 'player' : 'players'})</h4>
-              <div className="player-checkboxes">
-                {session.users.filter(u => u.isActiveInSession).map((user) => (
-                  <label 
-                    key={user.userId} 
-                    className={`player-checkbox ${customMatch.team1.includes(user.userId) ? 'disabled' : ''}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={customMatch.team2.includes(user.userId)}
-                      onChange={() => togglePlayerInTeam(user.userId, 'team2')}
-                      disabled={customMatch.team1.includes(user.userId)}
-                    />
-                    <span>{user.userName}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
+          <TeamSelector
+            users={session.users}
+            team1={customMatch.team1}
+            team2={customMatch.team2}
+            onToggle={togglePlayerInTeam}
+          />
           <div className="modal-actions">
             <button 
               onClick={handleCreateCustomMatch} 
@@ -559,41 +499,16 @@ function SessionDetail() {
           <div className="players-section-tab full-width">
             <div className="players-list">
               {session.users.map((user) => (
-                <div 
-                  key={user.userId} 
-                  className={`player-item ${user.isActiveInSession ? 'active' : 'paused'}`}
-                >
-                  <div className="player-info">
-                    <span className="player-status-icon">
-                      {user.isActiveInSession ? '✅' : '⏸️'}
-                    </span>
-                    <span className="player-name">{user.userName}</span>
-                    <span className="player-time" title="Total active time">
-                      ⏱️ {formatDuration(user.totalActiveTime)}
-                    </span>
-                  </div>
-                  {session.status === 'Active' && (
-                    <div className="player-actions">
-                      {user.isActiveInSession ? (
-                        <button 
-                          onClick={() => handlePauseUser(user.userId)}
-                          className="btn btn-warning btn-sm"
-                          title="Pause player"
-                        >
-                          ⏸️ Pause
-                        </button>
-                      ) : (
-                        <button 
-                          onClick={() => handleResumeUser(user.userId)}
-                          className="btn btn-success btn-sm"
-                          title="Resume player"
-                        >
-                          ▶️ Resume
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <PlayerItem
+                  key={user.userId}
+                  userId={user.userId}
+                  userName={user.userName}
+                  isActive={user.isActiveInSession}
+                  totalActiveTime={user.totalActiveTime}
+                  sessionStatus={session.status}
+                  onPause={handlePauseUser}
+                  onResume={handleResumeUser}
+                />
               ))}
             </div>
           </div>

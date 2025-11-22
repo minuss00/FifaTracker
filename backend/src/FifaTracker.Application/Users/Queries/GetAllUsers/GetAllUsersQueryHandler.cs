@@ -16,6 +16,7 @@ public class GetAllUsersQueryHandler : IRequestHandler<GetAllUsersQuery, List<Us
     public async Task<List<UserDto>> Handle(GetAllUsersQuery request, CancellationToken cancellationToken)
     {
         return await _context.Users
+            .AsNoTracking()
             .Where(u => u.IsActive)
             .OrderBy(u => u.Name)
             .Select(u => new UserDto(u.Id, u.Name, u.CreatedAt))

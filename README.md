@@ -1,14 +1,33 @@
 # FIFA Tracker
 
-Aplikacja do śledzenia statystyk meczów FIFA granych ze znajomymi.
+Aplikacja do śledzenia statystyk meczów FIFA granych ze znajomymi z inteligentnym systemem generowania meczów opartym na czasie aktywności graczy.
 
 ## 🎮 Funkcjonalności
 
-- Zarządzanie użytkownikami (soft delete - historia meczów zachowana)
-- Sesje gier (1v1, 2v2, 2v1) z automatycznym generowaniem meczów
-- Tworzenie customowych meczów
-- Leaderboard ze statystykami
-- Responsywny UI z modals i hamburger menu
+### Zarządzanie Sesjami
+- **Sesje gier** (1v1, 2v2, 2v1) z automatycznym generowaniem meczów
+- **Smart Match Generation** - algorytm priorytetowy zapewniający sprawiedliwy podział meczów
+- **Pause/Resume** - możliwość wstrzymania gracza bez utraty historii
+- **Activity Tracking** - śledzenie czasu aktywności każdego gracza
+- **Dynamiczne regenerowanie** - mecze dostosowują się do aktualnych priorytetów
+
+### Gracze & Statystyki
+- **Zarządzanie użytkownikami** (soft delete - historia meczów zachowana)
+- **Reactivate** - przywracanie nieaktywnych użytkowników
+- **Leaderboard** - dwa tryby: Standard Scoring i Effectiveness Scoring
+- **Statystyki per sesja** - wyniki, bramki, różnica bramek
+
+### Mecze
+- **Tworzenie customowych meczów** - dowolne kombinacje graczy
+- **Automatyczne generowanie** - zawsze 5 pending meczów
+- **Uniqueness first** - priorytet unikalnych kombinacji
+- **Real-time updates** - natychmiastowa aktualizacja po dodaniu wyniku
+
+### Progressive Web App (PWA)
+- **Instalacja na urządzeniach mobilnych** (iOS/Android)
+- **Offline cache** - działanie bez połączenia z internetem
+- **Apple meta tags** - pełne wsparcie dla iOS
+- **Service Worker** - cache-first strategy dla assetów
 
 ## 🚀 Szybki start
 
@@ -28,11 +47,28 @@ docker-compose up -d
 
 Zobacz: [QUICK_START_PRODUCTION.md](./QUICK_START_PRODUCTION.md)
 
-## 💻 Stack
+## 💻 Stack Technologiczny
 
-- **Backend:** .NET 9, Clean Architecture, CQRS (MediatR), EF Core, PostgreSQL
-- **Frontend:** React 19, TypeScript, Vite
-- **Infrastructure:** Docker, Cloudflare Tunnel
+### Backend
+- **.NET 9** - latest LTS
+- **Clean Architecture** - Domain/Application/Infrastructure/WebApi
+- **CQRS** - MediatR pattern
+- **EF Core 9** - Code-First migrations
+- **PostgreSQL 16** - relacyjna baza danych
+- **Middleware** - attribute-based cross-cutting concerns
+
+### Frontend
+- **React 19** - najnowsza wersja
+- **TypeScript** - type-safe development
+- **Vite 6** - szybki bundler
+- **PWA** - Progressive Web App support
+- **Component-based architecture** - reusable components
+
+### Infrastructure
+- **Docker & Docker Compose** - containerization
+- **Multi-stage builds** - optymalizacja obrazów
+- **nginx** - reverse proxy i static files
+- **Cloudflare Tunnel** - bezpieczny dostęp zdalny
 
 ## 📱 Dostęp z telefonu (sieć lokalna)
 

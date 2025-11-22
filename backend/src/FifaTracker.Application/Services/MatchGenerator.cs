@@ -5,6 +5,8 @@ namespace FifaTracker.Application.Services;
 
 public class MatchGenerator : IMatchGenerator
 {
+    private static readonly Random Random = new();
+
     public List<Match> GenerateSmartMatches(
         Guid sessionId,
         List<Guid> userIds,
@@ -16,14 +18,10 @@ public class MatchGenerator : IMatchGenerator
     {
         var matches = new List<Match>();
         var now = DateTime.UtcNow;
-        
-        // Calculate player priorities based on actual active time
         var playerStats = CalculatePlayerStats(userIds, sessionUsers, existingMatches, sessionStartTime, now);
         
-        // Generate matches based on type
         for (int i = 0; i < targetCount; i++)
         {
-            // Each match gets a slightly later CreatedAt time to maintain order
             var createdAt = now.AddMilliseconds(i);
             
             Match? newMatch = matchType switch
@@ -34,15 +32,10 @@ public class MatchGenerator : IMatchGenerator
                 _ => null
             };
             
-            if (newMatch != null)
-            {
-                matches.Add(newMatch);
-                UpdatePlayerStatsAfterMatch(playerStats, newMatch);
-            }
-            else
-            {
-                break; // Can't generate more unique matches
-            }
+            if (newMatch == null) break;
+            
+            matches.Add(newMatch);
+            UpdatePlayerStatsAfterMatch(playerStats, newMatch);
         }
         
         return matches;
@@ -56,86 +49,65 @@ public class MatchGenerator : IMatchGenerator
         DateTime now)
     {
         var stats = new Dictionary<Guid, PlayerMatchStats>();
+        var completedMatches = existingMatches.Where(m => m.IsCompleted).ToList();
+        var matchesPerHour = CalculateMatchesPerHour(completedMatches, sessionUsers, now);
         var sessionDuration = (now - sessionStartTime).TotalHours;
         
         foreach (var userId in userIds)
         {
             var sessionUser = sessionUsers.FirstOrDefault(su => su.UserId == userId);
-            if (sessionUser == null)
-                continue;
+            if (sessionUser == null) continue;
             
-            // Use actual active time instead of just time since join
             var activeTime = sessionUser.GetCurrentActiveTotalHours(now);
-            var activityRatio = sessionDuration > 0 ? activeTime / sessionDuration : 1.0;
-            
-            // Count matches for this player (including custom)
-            var playerMatches = existingMatches
-                .Where(m => m.MatchTeams.Any(mt => mt.UserId == userId))
-                .ToList();
-            
+            var playerMatches = existingMatches.Where(m => m.MatchTeams.Any(mt => mt.UserId == userId)).ToList();
             var completedCount = playerMatches.Count(m => m.IsCompleted);
-            var pendingCount = playerMatches.Count(m => !m.IsCompleted);
             
-            // Calculate expected matches based on ACTUAL ACTIVE TIME
-            // Calculate matches per hour rate from completed matches
-            var completedMatches = existingMatches.Where(m => m.IsCompleted).ToList();
-            
-            double matchesPerHour = 0;
-            if (completedMatches.Count > 0)
-            {
-                // Calculate total active hours for all players who have completed matches
-                var totalActiveHours = sessionUsers
-                    .Where(su => completedMatches.Any(m => m.MatchTeams.Any(mt => mt.UserId == su.UserId)))
-                    .Sum(su => su.GetCurrentActiveTotalHours(now));
-                
-                // Total matches played by all players
-                var totalMatchesPlayed = completedMatches.SelectMany(m => m.MatchTeams).Count();
-                
-                // Matches per hour rate
-                if (totalActiveHours > 0)
-                {
-                    matchesPerHour = totalMatchesPlayed / totalActiveHours;
-                }
-            }
-            
-            // Expected matches = player's active time × matches per hour rate
-            var expectedMatches = activeTime * matchesPerHour;
-            
-            // Priority based ONLY on completed matches vs expected
-            // Pending matches are ignored in priority calculation
             stats[userId] = new PlayerMatchStats
             {
                 UserId = userId,
-                TotalMatches = completedCount + pendingCount,
+                TotalMatches = playerMatches.Count,
                 CompletedMatches = completedCount,
-                PendingMatches = pendingCount,
+                PendingMatches = playerMatches.Count - completedCount,
                 TimeInSession = activeTime,
-                TimeRatio = activityRatio,
-                ExpectedMatches = expectedMatches,
-                Priority = expectedMatches - completedCount, // Only completed matches count!
+                TimeRatio = sessionDuration > 0 ? activeTime / sessionDuration : 1.0,
+                ExpectedMatches = activeTime * matchesPerHour,
+                Priority = (activeTime * matchesPerHour) - completedCount,
                 Teammates = new HashSet<Guid>(),
                 Opponents = new HashSet<Guid>()
             };
             
-            // Track who they've played with/against
-            foreach (var match in playerMatches)
-            {
-                var playerTeamNumber = match.MatchTeams.First(mt => mt.UserId == userId).TeamNumber;
-                foreach (var mt in match.MatchTeams.Where(mt => mt.UserId != userId))
-                {
-                    if (mt.TeamNumber == playerTeamNumber)
-                    {
-                        stats[userId].Teammates.Add(mt.UserId);
-                    }
-                    else
-                    {
-                        stats[userId].Opponents.Add(mt.UserId);
-                    }
-                }
-            }
+            TrackPlayerRelationships(stats[userId], playerMatches, userId);
         }
         
         return stats;
+    }
+
+    private double CalculateMatchesPerHour(List<Match> completedMatches, List<SessionUser> sessionUsers, DateTime now)
+    {
+        if (completedMatches.Count == 0) return 0;
+        
+        var totalActiveHours = sessionUsers
+            .Where(su => completedMatches.Any(m => m.MatchTeams.Any(mt => mt.UserId == su.UserId)))
+            .Sum(su => su.GetCurrentActiveTotalHours(now));
+        
+        var totalMatchesPlayed = completedMatches.SelectMany(m => m.MatchTeams).Count();
+        
+        return totalActiveHours > 0 ? totalMatchesPlayed / totalActiveHours : 0;
+    }
+
+    private void TrackPlayerRelationships(PlayerMatchStats stats, List<Match> playerMatches, Guid userId)
+    {
+        foreach (var match in playerMatches)
+        {
+            var playerTeamNumber = match.MatchTeams.First(mt => mt.UserId == userId).TeamNumber;
+            foreach (var mt in match.MatchTeams.Where(mt => mt.UserId != userId))
+            {
+                if (mt.TeamNumber == playerTeamNumber)
+                    stats.Teammates.Add(mt.UserId);
+                else
+                    stats.Opponents.Add(mt.UserId);
+            }
+        }
     }
 
     private Match? GenerateSmartOneVsOneMatch(
@@ -145,27 +117,20 @@ public class MatchGenerator : IMatchGenerator
         List<Match> newMatches,
         DateTime createdAt)
     {
-        var sortedPlayers = playerStats.OrderByDescending(p => p.Value.Priority).ToList();
+        var sortedPlayers = playerStats.OrderByDescending(p => p.Value.Priority).Select(p => p.Key).ToList();
+        if (sortedPlayers.Count < 2) return null;
         
-        if (sortedPlayers.Count < 2)
-            return null;
-        
-        // First pass: Try to find unique matchup
         foreach (var player1 in sortedPlayers)
         {
-            foreach (var player2 in sortedPlayers.Where(p => p.Key != player1.Key))
+            foreach (var player2 in sortedPlayers.Where(p => p != player1))
             {
-                if (MatchupExists(player1.Key, player2.Key, existingMatches, newMatches))
-                    continue;
-                
-                return CreateMatch(sessionId, new List<Guid> { player1.Key }, new List<Guid> { player2.Key }, createdAt);
+                if (!MatchupExists(player1, player2, existingMatches, newMatches))
+                    return CreateMatch(sessionId, [player1], [player2], createdAt);
             }
         }
         
-        // Second pass: If no unique matchup found, shuffle to create variety
-        var random = new Random();
-        var shuffledPlayers = sortedPlayers.OrderBy(_ => random.Next()).Take(2).ToList();
-        return CreateMatch(sessionId, new List<Guid> { shuffledPlayers[0].Key }, new List<Guid> { shuffledPlayers[1].Key }, createdAt);
+        var shuffled = sortedPlayers.OrderBy(_ => Random.Next()).Take(2).ToList();
+        return CreateMatch(sessionId, [shuffled[0]], [shuffled[1]], createdAt);
     }
 
     private Match? GenerateSmartTwoVsTwoMatch(
@@ -176,11 +141,8 @@ public class MatchGenerator : IMatchGenerator
         DateTime createdAt)
     {
         var sortedPlayers = playerStats.OrderByDescending(p => p.Value.Priority).Select(p => p.Key).ToList();
+        if (sortedPlayers.Count < 4) return null;
         
-        if (sortedPlayers.Count < 4)
-            return null;
-        
-        // First pass: Try to find unique matchup
         for (int i = 0; i < sortedPlayers.Count - 3; i++)
         {
             for (int j = i + 1; j < sortedPlayers.Count - 2; j++)
@@ -197,32 +159,15 @@ public class MatchGenerator : IMatchGenerator
                         
                         var team2 = new List<Guid> { sortedPlayers[k], sortedPlayers[l] };
                         
-                        if (TeamMatchupExists(team1, team2, existingMatches, newMatches))
-                            continue;
-                        
-                        return CreateTwoVsTwoMatch(sessionId, team1, team2, createdAt);
+                        if (!TeamMatchupExists(team1, team2, existingMatches, newMatches))
+                            return CreateMatch(sessionId, team1, team2, createdAt);
                     }
                 }
             }
         }
         
-        // Second pass: If no unique matchup found, shuffle players to create varied matchups
-        // Even with duplicates, we want different team compositions each time
-        if (sortedPlayers.Count >= 4)
-        {
-            var random = new Random();
-            var shuffledPlayers = sortedPlayers.OrderBy(_ => random.Next()).ToList();
-            var team1 = new List<Guid> { shuffledPlayers[0], shuffledPlayers[1] };
-            var team2 = new List<Guid> { shuffledPlayers[2], shuffledPlayers[3] };
-            return CreateTwoVsTwoMatch(sessionId, team1, team2, createdAt);
-        }
-        
-        return null;
-    }
-    
-    private Match CreateTwoVsTwoMatch(Guid sessionId, List<Guid> team1, List<Guid> team2, DateTime createdAt)
-    {
-        return CreateMatch(sessionId, team1, team2, createdAt);
+        var shuffled = sortedPlayers.OrderBy(_ => Random.Next()).ToList();
+        return CreateMatch(sessionId, [shuffled[0], shuffled[1]], [shuffled[2], shuffled[3]], createdAt);
     }
 
     private Match? GenerateSmartTwoVsOneMatch(
@@ -233,11 +178,8 @@ public class MatchGenerator : IMatchGenerator
         DateTime createdAt)
     {
         var sortedPlayers = playerStats.OrderByDescending(p => p.Value.Priority).Select(p => p.Key).ToList();
+        if (sortedPlayers.Count < 3) return null;
         
-        if (sortedPlayers.Count < 3)
-            return null;
-        
-        // First pass: Try to find unique matchup
         for (int solo = 0; solo < sortedPlayers.Count; solo++)
         {
             var soloPlayer = sortedPlayers[solo];
@@ -252,30 +194,14 @@ public class MatchGenerator : IMatchGenerator
                     
                     var team = new List<Guid> { sortedPlayers[i], sortedPlayers[j] };
                     
-                    if (TwoVsOneMatchupExists(team, soloPlayer, existingMatches, newMatches))
-                        continue;
-                    
-                    return CreateTwoVsOneMatch(sessionId, team, soloPlayer, createdAt);
+                    if (!TwoVsOneMatchupExists(team, soloPlayer, existingMatches, newMatches))
+                        return CreateMatch(sessionId, team, [soloPlayer], createdAt);
                 }
             }
         }
         
-        // Second pass: If no unique matchup found, shuffle to create variety
-        if (sortedPlayers.Count >= 3)
-        {
-            var random = new Random();
-            var shuffledPlayers = sortedPlayers.OrderBy(_ => random.Next()).ToList();
-            var team = new List<Guid> { shuffledPlayers[0], shuffledPlayers[1] };
-            var soloPlayer = shuffledPlayers[2];
-            return CreateTwoVsOneMatch(sessionId, team, soloPlayer, createdAt);
-        }
-        
-        return null;
-    }
-    
-    private Match CreateTwoVsOneMatch(Guid sessionId, List<Guid> team, Guid soloPlayer, DateTime createdAt)
-    {
-        return CreateMatch(sessionId, team, new List<Guid> { soloPlayer }, createdAt);
+        var shuffled = sortedPlayers.OrderBy(_ => Random.Next()).ToList();
+        return CreateMatch(sessionId, [shuffled[0], shuffled[1]], [shuffled[2]], createdAt);
     }
     
     private Match CreateMatch(Guid sessionId, List<Guid> team1, List<Guid> team2, DateTime createdAt)
@@ -315,14 +241,11 @@ public class MatchGenerator : IMatchGenerator
 
     private void UpdatePlayerStatsAfterMatch(Dictionary<Guid, PlayerMatchStats> stats, Match match)
     {
-        foreach (var mt in match.MatchTeams)
+        foreach (var mt in match.MatchTeams.Where(mt => stats.ContainsKey(mt.UserId)))
         {
-            if (stats.ContainsKey(mt.UserId))
-            {
-                stats[mt.UserId].PendingMatches++;
-                stats[mt.UserId].TotalMatches++;
-                stats[mt.UserId].Priority = stats[mt.UserId].ExpectedMatches - stats[mt.UserId].TotalMatches;
-            }
+            stats[mt.UserId].PendingMatches++;
+            stats[mt.UserId].TotalMatches++;
+            stats[mt.UserId].Priority = stats[mt.UserId].ExpectedMatches - stats[mt.UserId].TotalMatches;
         }
     }
 

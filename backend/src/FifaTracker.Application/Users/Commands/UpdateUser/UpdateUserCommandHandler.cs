@@ -33,6 +33,7 @@ public class UpdateUserCommandHandler : IRequestHandler<UpdateUserCommand, Unit>
 
         // Check if another user with the same name already exists
         var existingUser = await _context.Users
+            .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Name.ToLower() == request.Name.ToLower() && u.Id != request.Id, cancellationToken);
 
         if (existingUser != null)

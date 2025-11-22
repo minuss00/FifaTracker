@@ -28,23 +28,9 @@ public class GenerateMoreMatchesCommandHandler : IRequestHandler<GenerateMoreMat
         if (session.Status != Domain.Entities.SessionStatus.Active)
             throw new InvalidOperationException("Cannot generate matches for inactive session");
 
-        var existingMatches = await _context.Matches
-            .Where(m => m.SessionId == request.SessionId)
-            .Include(m => m.MatchTeams)
-            .ToListAsync(cancellationToken);
+        var existingMatches = await _context.GetMatchesForSessionAsync(request.SessionId, cancellationToken);
+        _context.RemovePendingGeneratedMatches(existingMatches);
 
-        // Remove all pending generated matches before generating new ones
-        var pendingGeneratedMatches = existingMatches
-            .Where(m => !m.IsCompleted && m.IsGenerated)
-            .ToList();
-        
-        foreach (var match in pendingGeneratedMatches)
-        {
-            _context.Matches.Remove(match);
-            existingMatches.Remove(match); // Update list for generator
-        }
-
-        // Only generate for active users
         var activeSessionUsers = session.SessionUsers.Where(su => su.IsActiveInSession).ToList();
         var activeUserIds = activeSessionUsers.Select(su => su.UserId).ToList();
 

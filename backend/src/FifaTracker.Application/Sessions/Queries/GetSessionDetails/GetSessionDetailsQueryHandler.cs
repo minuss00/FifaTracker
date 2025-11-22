@@ -16,6 +16,7 @@ public class GetSessionDetailsQueryHandler : IRequestHandler<GetSessionDetailsQu
     public async Task<SessionDetailsDto> Handle(GetSessionDetailsQuery request, CancellationToken cancellationToken)
     {
         var session = await _context.Sessions
+            .AsNoTracking()
             .Include(s => s.SessionUsers)
                 .ThenInclude(su => su.User)
             .Include(s => s.Matches)

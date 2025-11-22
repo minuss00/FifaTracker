@@ -16,6 +16,7 @@ public class GetLeaderboardQueryHandler : IRequestHandler<GetLeaderboardQuery, L
     public async Task<List<LeaderboardEntryDto>> Handle(GetLeaderboardQuery request, CancellationToken cancellationToken)
     {
         var users = await _context.Users
+            .AsNoTracking()
             .Where(u => u.IsActive)
             .ToListAsync(cancellationToken);
         var leaderboard = new List<LeaderboardEntryDto>();
@@ -24,6 +25,7 @@ public class GetLeaderboardQueryHandler : IRequestHandler<GetLeaderboardQuery, L
         {
             // Get all matches where user participated
             var userMatches = await _context.MatchTeams
+                .AsNoTracking()
                 .Include(mt => mt.Match)
                 .Where(mt => mt.UserId == user.Id && mt.Match.IsCompleted)
                 .ToListAsync(cancellationToken);

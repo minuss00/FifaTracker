@@ -17,6 +17,7 @@ public class GetActiveSessionsQueryHandler : IRequestHandler<GetActiveSessionsQu
     public async Task<List<SessionSummaryDto>> Handle(GetActiveSessionsQuery request, CancellationToken cancellationToken)
     {
         var sessions = await _context.Sessions
+            .AsNoTracking()
             .Where(s => s.Status == SessionStatus.Active)
             .Include(s => s.Matches)
             .Include(s => s.SessionUsers)

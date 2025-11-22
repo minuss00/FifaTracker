@@ -29,6 +29,7 @@ public class CreateUserCommandHandler : IRequestHandler<CreateUserCommand, Guid>
 
         // Check if user with the same name already exists
         var existingUser = await _context.Users
+            .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Name.ToLower() == request.Name.ToLower(), cancellationToken);
 
         if (existingUser != null)
