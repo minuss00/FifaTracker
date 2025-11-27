@@ -15,6 +15,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FifaTracker.WebApi", "backe
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FifaTracker.Domain", "backend\src\FifaTracker.Domain\FifaTracker.Domain.csproj", "{536B22BF-BC34-49BE-A397-954CD0767307}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FifaTracker.Application.Tests", "backend\tests\FifaTracker.Application.Tests\FifaTracker.Application.Tests.csproj", "{252D8DAA-A292-EC26-27FC-CACB6D0020F9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -73,6 +77,18 @@ Global
 		{536B22BF-BC34-49BE-A397-954CD0767307}.Release|x64.Build.0 = Release|Any CPU
 		{536B22BF-BC34-49BE-A397-954CD0767307}.Release|x86.ActiveCfg = Release|Any CPU
 		{536B22BF-BC34-49BE-A397-954CD0767307}.Release|x86.Build.0 = Release|Any CPU
+		{252D8DAA-A292-EC26-27FC-CACB6D0020F9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{252D8DAA-A292-EC26-27FC-CACB6D0020F9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{252D8DAA-A292-EC26-27FC-CACB6D0020F9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{252D8DAA-A292-EC26-27FC-CACB6D0020F9}.Debug|x64.Build.0 = Debug|Any CPU
+		{252D8DAA-A292-EC26-27FC-CACB6D0020F9}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{252D8DAA-A292-EC26-27FC-CACB6D0020F9}.Debug|x86.Build.0 = Debug|Any CPU
+		{252D8DAA-A292-EC26-27FC-CACB6D0020F9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{252D8DAA-A292-EC26-27FC-CACB6D0020F9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{252D8DAA-A292-EC26-27FC-CACB6D0020F9}.Release|x64.ActiveCfg = Release|Any CPU
+		{252D8DAA-A292-EC26-27FC-CACB6D0020F9}.Release|x64.Build.0 = Release|Any CPU
+		{252D8DAA-A292-EC26-27FC-CACB6D0020F9}.Release|x86.ActiveCfg = Release|Any CPU
+		{252D8DAA-A292-EC26-27FC-CACB6D0020F9}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -83,5 +99,10 @@ Global
 		{03E26CAA-BE47-45E3-8AB4-46D4946653D4} = {0F9113EE-888A-26D2-68B0-4A7D0A2A8745}
 		{0C7AA64B-5ED7-4A47-9368-1C4D4DED07FD} = {0F9113EE-888A-26D2-68B0-4A7D0A2A8745}
 		{536B22BF-BC34-49BE-A397-954CD0767307} = {0F9113EE-888A-26D2-68B0-4A7D0A2A8745}
+		{02EA681E-C7D8-13C7-8484-4AC65E1B71E8} = {1AE8ACA6-933B-BF2A-3671-3E2EAC007D16}
+		{252D8DAA-A292-EC26-27FC-CACB6D0020F9} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {CCB5C5B8-0319-4BAE-BD4A-F7B9CAD3154A}
 	EndGlobalSection
 EndGlobal
