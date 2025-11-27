@@ -287,14 +287,23 @@ function SessionDetail() {
   const getSessionLeaderboard = () => {
     const entries = calculateSessionLeaderboard();
     
-    // Both modes use the same sorting: by effectiveness
-    return entries.sort((a, b) => {
-      const effA = calculateEffectiveness(a);
-      const effB = calculateEffectiveness(b);
-      if (effB !== effA) return effB - effA;
-      if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
-      return b.goalsScored - a.goalsScored;
-    });
+    if (leaderboardMode === 'standard') {
+      // Standard: sort by points, then goal difference, then goals scored
+      return entries.sort((a, b) => {
+        if (b.points !== a.points) return b.points - a.points;
+        if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+        return b.goalsScored - a.goalsScored;
+      });
+    } else {
+      // Effectiveness: sort by effectiveness score, then goal difference, then goals scored
+      return entries.sort((a, b) => {
+        const effA = calculateEffectiveness(a);
+        const effB = calculateEffectiveness(b);
+        if (effB !== effA) return effB - effA;
+        if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+        return b.goalsScored - a.goalsScored;
+      });
+    }
   };
 
   const getFilteredAndSortedMatches = () => {
