@@ -33,15 +33,32 @@ public class RemoveUserFromSessionCommandHandler : IRequestHandler<RemoveUserFro
         // Remove user from session
         _context.SessionUsers.Remove(sessionUser);
 
-        // Remove all matches involving this user
-        var userMatches = await _context.Matches
-            .Where(m => m.SessionId == request.SessionId && m.MatchTeams.Any(mt => mt.UserId == request.UserId))
+        // Remove only pending generated matches that involve the removed user. Preserve completed matches to keep statistics intact.
+        var pendingMatchesWithUser = await _context.Matches
+            .Where(m => m.SessionId == request.SessionId && !m.IsCompleted && m.MatchTeams.Any(mt => mt.UserId == request.UserId))
             .ToListAsync(cancellationToken);
 
-        foreach (var match in userMatches)
+        if (pendingMatchesWithUser.Any())
         {
-            _context.Matches.Remove(match);
+            _context.Matches.RemoveRange(pendingMatchesWithUser);
         }
+
+        // After removing pending matches with the user, regenerate pending generated matches for remaining users
+        // to keep a consistent number of pending matches. This mirrors the GenerateMoreMatches behavior which
+        // clears existing generated pending matches and then generates new ones based on completed history.
+
+        // Clear any remaining generated pending matches (they will be recreated by the generator)
+        var remainingGeneratedPending = await _context.Matches
+            .Where(m => m.SessionId == request.SessionId && m.IsGenerated && !m.IsCompleted)
+            .ToListAsync(cancellationToken);
+
+        _context.Matches.RemoveRange(remainingGeneratedPending);
+
+        // Build the existingMatches list which will include completed matches and any custom matches (completed or not)
+        var existingMatches = await _context.Matches
+            .Where(m => m.SessionId == request.SessionId)
+            .Include(m => m.MatchTeams)
+            .ToListAsync(cancellationToken);
 
         // Get remaining users
         var remainingUserIds = session.SessionUsers
@@ -49,23 +66,16 @@ public class RemoveUserFromSessionCommandHandler : IRequestHandler<RemoveUserFro
             .Select(su => su.UserId)
             .ToList();
 
-        // Get remaining matches (should be none involving the removed user)
-        var existingMatches = await _context.Matches
-            .Where(m => m.SessionId == request.SessionId)
-            .Include(m => m.MatchTeams)
-            .ToListAsync(cancellationToken);
-
-        // Build user join times dictionary for remaining users
         var userJoinTimes = session.SessionUsers
             .Where(su => su.UserId != request.UserId)
             .ToDictionary(su => su.UserId, su => su.JoinedAt);
 
-        // Generate new matches for remaining users
+        // Generate new pending matches for remaining users (default target 5)
         var newMatches = _matchGenerator.GenerateSmartMatches(
             session.Id,
             remainingUserIds,
             session.MatchType,
-            5, // Generate 5 pending matches
+            5,
             existingMatches,
             userJoinTimes,
             session.StartDate);
