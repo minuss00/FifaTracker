@@ -49,9 +49,19 @@ public class GetSessionDetailsQueryHandler : IRequestHandler<GetSessionDetailsQu
         var playerStats = CalculatePlayerStats(userIds, completedMatches, users.ToDictionary(u => u.UserId, u => u.JoinedAt), session.StartDate, DateTime.UtcNow);
 
         // Sort matches so that matches with players who have played less are first
+        // Be defensive: some matches may contain players who have been removed from the session
+        // (we preserve completed matches). In that case, ignore players not present in playerStats
+        // when computing the average priority for sorting.
         matches = matches.OrderByDescending(m =>
-            m.Team1Players.Concat(m.Team2Players).Select(mp => playerStats[mp.UserId]).Average(p => p.Priority)
-        ).ToList();
+        {
+            var priorities = m.Team1Players.Concat(m.Team2Players)
+                .Select(mp => mp.UserId)
+                .Where(id => playerStats.ContainsKey(id))
+                .Select(id => playerStats[id].Priority)
+                .ToList();
+
+            return priorities.Any() ? priorities.Average() : 0.0;
+        }).ToList();
 
         return new SessionDetailsDto(
             session.Id,
