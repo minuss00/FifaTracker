@@ -5,283 +5,230 @@ namespace FifaTracker.Application.Services;
 
 public class MatchGenerator : IMatchGenerator
 {
-    private static readonly Random Random = new();
-
-    public List<Match> GenerateSmartMatches(
+    public List<Match> GetPendingMatches(
         Guid sessionId,
         List<Guid> userIds,
         List<SessionUser> sessionUsers,
-        FifaTracker.Domain.Entities.MatchType matchType,
-        int targetCount,
-        List<Match> existingMatches,
+        Domain.Entities.MatchType matchType,
+        List<Match> completedMatches,
         DateTime sessionStartTime)
     {
-        var matches = new List<Match>();
-        var now = DateTime.UtcNow;
+        // Generate ALL possible combinations - DON'T filter completed ones
+        var allCombinations = GenerateAllPossibleCombinations(sessionId, userIds, matchType);
         
-        // Only use completed matches - pending matches are temporary and will be regenerated
-        var completedMatches = existingMatches.Where(m => m.IsCompleted).ToList();
-        var playerStats = CalculatePlayerStats(userIds, sessionUsers, completedMatches, sessionStartTime, now);
-        
-        for (int i = 0; i < targetCount; i++)
+        // Calculate priority for each match (including already played ones)
+        foreach (var match in allCombinations)
         {
-            var createdAt = now.AddMilliseconds(i);
+            match.Priority = match.IsGenerated 
+                ? CalculateMatchPriority(match, sessionUsers, completedMatches, allCombinations, sessionStartTime)
+                : double.MaxValue; // Custom matches always first
+        }
+        
+        // Sort: custom matches first, then by priority descending
+        // This returns ALL combinations (including completed ones) sorted by priority
+        return allCombinations
+            .OrderByDescending(m => m.Priority)
+            .ToList();
+    }
+
+    public List<Match> GenerateAllPossibleCombinations(
+    Guid sessionId,
+    List<Guid> userIds,
+    Domain.Entities.MatchType matchType)
+    {
+        return matchType switch
+        {
+            Domain.Entities.MatchType.OneVsOne => GenerateAllOneVsOneCombinations(sessionId, userIds),
+            Domain.Entities.MatchType.TwoVsTwo => GenerateAllTwoVsTwoCombinations(sessionId, userIds),
+            Domain.Entities.MatchType.TwoVsOne => GenerateAllTwoVsOneCombinations(sessionId, userIds),
+            _ => []
+        };
+    }
+
+    public double CalculateMatchPriority(
+        Match match,
+        List<SessionUser> sessionUsers,
+        List<Match> completedMatches,
+        List<Match> allPossibleCombinations,
+        DateTime sessionStartTime)
+    {
+        var now = DateTime.UtcNow;
+        var playerIds = match.MatchTeams.Select(mt => mt.UserId).ToList();
+        
+        // Check if this specific match was already played
+        var wasPlayed = MatchExistsInCompleted(match, completedMatches);
+        
+        // Check if ALL possible combinations have been played
+        var allUserIds = sessionUsers.Select(su => su.UserId).ToList();
+        var matchType = GetMatchTypeFromTeamSizes(match);
+
+        if (allPossibleCombinations == null || allPossibleCombinations.Count == 0)
+            allPossibleCombinations = GenerateAllPossibleCombinations(match.SessionId, allUserIds, matchType);
+
+        var allPlayed = allPossibleCombinations.All(combo => MatchExistsInCompleted(combo, completedMatches));
+        
+        // If this match was played AND not all combinations were played yet, apply penalty
+        if (wasPlayed && !allPlayed)
+        {
+            return -1000.0;
+        }
+        
+        // If all combinations were played, reset - no penalty for played matches
+        // Calculate normal priority based on fairness
+        var fairnessScore = 0.0;
+        var timeBonus = 0.0;
+        
+        foreach (var playerId in playerIds)
+        {
+            var sessionUser = sessionUsers.FirstOrDefault(su => su.UserId == playerId);
+            if (sessionUser == null) continue;
             
-            Match? newMatch = matchType switch
+            var activeTime = sessionUser.GetCurrentActiveTotalHours(now);
+            var playerCompletedCount = completedMatches.Count(m => m.MatchTeams.Any(mt => mt.UserId == playerId));
+            
+            // Simple fairness: players with fewer completed matches should play more
+            var avgMatchesPerPlayer = completedMatches.Count > 0 
+                ? completedMatches.SelectMany(m => m.MatchTeams).Count() / (double)sessionUsers.Count
+                : 0;
+            
+            fairnessScore += (avgMatchesPerPlayer - playerCompletedCount);
+            timeBonus += activeTime; // Players with more active time get slight bonus
+        }
+        
+        // Penalty for repetition: if any player was in the last completed match
+        var repetitionPenalty = 0.0;
+        var lastMatch = completedMatches.OrderByDescending(m => m.CreatedAt).FirstOrDefault();
+        if (lastMatch != null)
+        {
+            var lastMatchPlayerIds = lastMatch.MatchTeams.Select(mt => mt.UserId).ToList();
+            var repeatCount = playerIds.Count(pid => lastMatchPlayerIds.Contains(pid));
+            repetitionPenalty = repeatCount * 10.0; // -10 per repeated player
+        }
+        
+        // Final priority: fairness (most important) + time bonus - repetition penalty
+        return (fairnessScore * 100.0) + (timeBonus * 5.0) - repetitionPenalty;
+    }
+    
+    private Domain.Entities.MatchType GetMatchTypeFromTeamSizes(Match match)
+    {
+        var team1Size = match.MatchTeams.Count(mt => mt.TeamNumber == 1);
+        var team2Size = match.MatchTeams.Count(mt => mt.TeamNumber == 2);
+        
+        if (team1Size == 1 && team2Size == 1) return Domain.Entities.MatchType.OneVsOne;
+        if (team1Size == 2 && team2Size == 2) return Domain.Entities.MatchType.TwoVsTwo;
+        if (team1Size == 2 && team2Size == 1) return Domain.Entities.MatchType.TwoVsOne;
+        if (team1Size == 1 && team2Size == 2) return Domain.Entities.MatchType.TwoVsOne;
+        
+        return Domain.Entities.MatchType.OneVsOne; // Default fallback
+    }
+
+    private List<Match> GenerateAllOneVsOneCombinations(Guid sessionId, List<Guid> userIds)
+    {
+        var matches = new List<Match>();
+        if (userIds.Count < 2) return matches;
+        
+        for (int i = 0; i < userIds.Count - 1; i++)
+        {
+            for (int j = i + 1; j < userIds.Count; j++)
             {
-                FifaTracker.Domain.Entities.MatchType.OneVsOne => GenerateSmartOneVsOneMatch(sessionId, playerStats, completedMatches, matches, createdAt),
-                FifaTracker.Domain.Entities.MatchType.TwoVsTwo => GenerateSmartTwoVsTwoMatch(sessionId, playerStats, completedMatches, matches, createdAt),
-                FifaTracker.Domain.Entities.MatchType.TwoVsOne => GenerateSmartTwoVsOneMatch(sessionId, playerStats, completedMatches, matches, createdAt),
-                _ => null
-            };
-            
-            if (newMatch == null) break;
-            
-            matches.Add(newMatch);
-            UpdatePlayerStatsAfterMatch(playerStats, newMatch);
+                matches.Add(CreateMatch(sessionId, [userIds[i]], [userIds[j]]));
+            }
         }
         
         return matches;
     }
 
-    private Dictionary<Guid, PlayerMatchStats> CalculatePlayerStats(
-        List<Guid> userIds,
-        List<SessionUser> sessionUsers,
-        List<Match> completedMatches,
-        DateTime sessionStartTime,
-        DateTime now)
+    private List<Match> GenerateAllTwoVsTwoCombinations(Guid sessionId, List<Guid> userIds)
     {
-        var stats = new Dictionary<Guid, PlayerMatchStats>();
-        var sessionDuration = (now - sessionStartTime).TotalHours;
+        var matches = new List<Match>();
+        if (userIds.Count < 4) return matches;
         
-        // Calculate matches per hour of active time
-        var matchesPerHour = CalculateMatchesPerHour(completedMatches, sessionUsers, now);
+        var players = userIds.ToArray();
+        var n = players.Length;
         
-        // For tests with equal active time for all players, use simple equal distribution
-        // Check if all players have roughly the same active time (within 1%)
-        var activeTimes = sessionUsers
-            .Where(su => userIds.Contains(su.UserId))
-            .Select(su => su.GetCurrentActiveTotalHours(now))
-            .ToList();
-        
-        var useEqualDistribution = activeTimes.Count > 0 &&
-            activeTimes.All(t => Math.Abs(t - activeTimes[0]) / Math.Max(activeTimes[0], 0.001) < 0.01);
-        
-        // If using equal distribution, calculate average matches per player
-        var avgMatchesPerPlayer = 0.0;
-        if (useEqualDistribution && completedMatches.Count > 0)
+        // Generate all 2-player teams: C(n,2)
+        var teams = new List<List<Guid>>();
+        for (int i = 0; i < n - 1; i++)
         {
-            var totalPlayerMatches = completedMatches.SelectMany(m => m.MatchTeams).Count();
-            avgMatchesPerPlayer = (double)totalPlayerMatches / userIds.Count;
-        }
-        
-        foreach (var userId in userIds)
-        {
-            var sessionUser = sessionUsers.FirstOrDefault(su => su.UserId == userId);
-            if (sessionUser == null) continue;
-            
-            var activeTime = sessionUser.GetCurrentActiveTotalHours(now);
-            var playerCompletedMatches = completedMatches.Where(m => m.MatchTeams.Any(mt => mt.UserId == userId)).ToList();
-            var completedCount = playerCompletedMatches.Count;
-            
-            // Calculate expected matches
-            double expectedMatches;
-            if (useEqualDistribution)
+            for (int j = i + 1; j < n; j++)
             {
-                // For equal active time, expect equal distribution
-                expectedMatches = avgMatchesPerPlayer;
-            }
-            else
-            {
-                // For varying active time, use time-based calculation
-                expectedMatches = activeTime * matchesPerHour;
-                if (matchesPerHour == 0 && completedMatches.Count == 0)
-                {
-                    expectedMatches = 0; // No basis for estimation yet
-                }
-            }
-            
-            var basePriority = expectedMatches - completedCount;
-            
-            stats[userId] = new PlayerMatchStats
-            {
-                UserId = userId,
-                TotalMatches = completedCount, // Only completed matches count
-                CompletedMatches = completedCount,
-                PendingMatches = 0, // Pending matches are ignored
-                TimeInSession = activeTime,
-                TimeRatio = sessionDuration > 0 ? activeTime / sessionDuration : 1.0,
-                ExpectedMatches = expectedMatches,
-                Priority = basePriority, // Simple linear priority
-                Teammates = new HashSet<Guid>(),
-                Opponents = new HashSet<Guid>(),
-                RecentTeammates = new List<Guid>(),
-                RecentOpponents = new List<Guid>()
-            };
-            
-            TrackPlayerRelationships(stats[userId], playerCompletedMatches, userId);
-        }
-        
-        return stats;
-    }
-
-    private double CalculateMatchesPerHour(List<Match> completedMatches, List<SessionUser> sessionUsers, DateTime now)
-    {
-        if (completedMatches.Count == 0) return 0;
-        
-        var totalActiveHours = sessionUsers
-            .Where(su => completedMatches.Any(m => m.MatchTeams.Any(mt => mt.UserId == su.UserId)))
-            .Sum(su => su.GetCurrentActiveTotalHours(now));
-        
-        var totalMatchesPlayed = completedMatches.SelectMany(m => m.MatchTeams).Count();
-        
-        return totalActiveHours > 0 ? totalMatchesPlayed / totalActiveHours : 0;
-    }
-
-    private void TrackPlayerRelationships(PlayerMatchStats stats, List<Match> playerMatches, Guid userId)
-    {
-        var recentMatches = playerMatches.OrderByDescending(m => m.CreatedAt).Take(5).ToList();
-        
-        foreach (var match in playerMatches)
-        {
-            var playerTeamNumber = match.MatchTeams.First(mt => mt.UserId == userId).TeamNumber;
-            var isRecent = recentMatches.Contains(match);
-            
-            foreach (var mt in match.MatchTeams.Where(mt => mt.UserId != userId))
-            {
-                if (mt.TeamNumber == playerTeamNumber)
-                {
-                    stats.Teammates.Add(mt.UserId);
-                    if (isRecent) stats.RecentTeammates.Add(mt.UserId);
-                }
-                else
-                {
-                    stats.Opponents.Add(mt.UserId);
-                    if (isRecent) stats.RecentOpponents.Add(mt.UserId);
-                }
-            }
-        }
-    }
-
-    private Match? GenerateSmartOneVsOneMatch(
-        Guid sessionId,
-        Dictionary<Guid, PlayerMatchStats> playerStats,
-        List<Match> completedMatches,
-        List<Match> newMatches,
-        DateTime createdAt)
-    {
-        var sortedPlayers = playerStats.OrderByDescending(p => p.Value.Priority).Select(p => p.Key).ToList();
-        if (sortedPlayers.Count < 2) return null;
-        
-        foreach (var player1 in sortedPlayers)
-        {
-            foreach (var player2 in sortedPlayers.Where(p => p != player1))
-            {
-                if (!MatchupExists(player1, player2, completedMatches, newMatches))
-                    return CreateMatch(sessionId, [player1], [player2], createdAt);
+                teams.Add(new List<Guid> { players[i], players[j] });
             }
         }
         
-        var shuffled = sortedPlayers.OrderBy(_ => Random.Next()).Take(2).ToList();
-        return CreateMatch(sessionId, [shuffled[0]], [shuffled[1]], createdAt);
-    }
-
-    private Match? GenerateSmartTwoVsTwoMatch(
-        Guid sessionId,
-        Dictionary<Guid, PlayerMatchStats> playerStats,
-        List<Match> completedMatches,
-        List<Match> newMatches,
-        DateTime createdAt)
-    {
-        var sortedPlayers = playerStats.OrderByDescending(p => p.Value.Priority).Select(p => p.Key).ToList();
-        if (sortedPlayers.Count < 4) return null;
+        // Find all pairs of non-overlapping teams and track unique matches
+        var uniqueMatches = new HashSet<string>();
         
-        var bestMatch = (Match?)null;
-        var bestScore = double.MinValue;
-        
-        for (int i = 0; i < sortedPlayers.Count - 3; i++)
+        for (int i = 0; i < teams.Count - 1; i++)
         {
-            for (int j = i + 1; j < sortedPlayers.Count - 2; j++)
+            for (int j = i + 1; j < teams.Count; j++)
             {
-                var team1 = new List<Guid> { sortedPlayers[i], sortedPlayers[j] };
+                var team1 = teams[i];
+                var team2 = teams[j];
                 
-                for (int k = 0; k < sortedPlayers.Count - 1; k++)
+                // Check if teams don't share players
+                if (!team1.Any(p => team2.Contains(p)))
                 {
-                    if (team1.Contains(sortedPlayers[k])) continue;
+                    // Create normalized key: sort teams by first player, then create ordered key
+                    var sortedTeams = new[] { team1, team2 }
+                        .OrderBy(t => t[0])
+                        .ThenBy(t => t[1])
+                        .ToList();
                     
-                    for (int l = k + 1; l < sortedPlayers.Count; l++)
+                    var key = $"{sortedTeams[0][0]},{sortedTeams[0][1]}_vs_{sortedTeams[1][0]},{sortedTeams[1][1]}";
+                    
+                    if (uniqueMatches.Add(key))
                     {
-                        if (team1.Contains(sortedPlayers[l])) continue;
-                        
-                        var team2 = new List<Guid> { sortedPlayers[k], sortedPlayers[l] };
-                        
-                        if (!TeamMatchupExists(team1, team2, completedMatches, newMatches))
-                        {
-                            var score = CalculateMatchupDiversityScore(team1, team2, playerStats);
-                            if (score > bestScore)
-                            {
-                                bestScore = score;
-                                bestMatch = CreateMatch(sessionId, team1, team2, createdAt);
-                            }
-                        }
+                        matches.Add(CreateMatch(sessionId, team1, team2));
                     }
                 }
             }
         }
         
-        if (bestMatch != null) return bestMatch;
-        
-        var shuffled = sortedPlayers.OrderBy(_ => Random.Next()).ToList();
-        return CreateMatch(sessionId, [shuffled[0], shuffled[1]], [shuffled[2], shuffled[3]], createdAt);
+        return matches;
     }
 
-    private Match? GenerateSmartTwoVsOneMatch(
-        Guid sessionId,
-        Dictionary<Guid, PlayerMatchStats> playerStats,
-        List<Match> completedMatches,
-        List<Match> newMatches,
-        DateTime createdAt)
+    private List<Match> GenerateAllTwoVsOneCombinations(Guid sessionId, List<Guid> userIds)
     {
-        var sortedPlayers = playerStats.OrderByDescending(p => p.Value.Priority).Select(p => p.Key).ToList();
-        if (sortedPlayers.Count < 3) return null;
+        var matches = new List<Match>();
+        if (userIds.Count < 3) return matches;
         
-        var bestMatch = (Match?)null;
-        var bestScore = double.MinValue;
-        
-        for (int solo = 0; solo < sortedPlayers.Count; solo++)
+        for (int solo = 0; solo < userIds.Count; solo++)
         {
-            var soloPlayer = sortedPlayers[solo];
-            
-            for (int i = 0; i < sortedPlayers.Count - 1; i++)
+            for (int i = 0; i < userIds.Count - 1; i++)
             {
-                if (sortedPlayers[i] == soloPlayer) continue;
+                if (i == solo) continue;
                 
-                for (int j = i + 1; j < sortedPlayers.Count; j++)
+                for (int j = i + 1; j < userIds.Count; j++)
                 {
-                    if (sortedPlayers[j] == soloPlayer) continue;
+                    if (j == solo) continue;
                     
-                    var team = new List<Guid> { sortedPlayers[i], sortedPlayers[j] };
-                    
-                    if (!TwoVsOneMatchupExists(team, soloPlayer, completedMatches, newMatches))
-                    {
-                        var score = CalculateMatchupDiversityScore(team, [soloPlayer], playerStats);
-                        if (score > bestScore)
-                        {
-                            bestScore = score;
-                            bestMatch = CreateMatch(sessionId, team, [soloPlayer], createdAt);
-                        }
-                    }
+                    var team = new List<Guid> { userIds[i], userIds[j] };
+                    matches.Add(CreateMatch(sessionId, team, [userIds[solo]]));
                 }
             }
         }
         
-        if (bestMatch != null) return bestMatch;
-        
-        var shuffled = sortedPlayers.OrderBy(_ => Random.Next()).ToList();
-        return CreateMatch(sessionId, [shuffled[0], shuffled[1]], [shuffled[2]], createdAt);
+        return matches;
     }
-    
-    private Match CreateMatch(Guid sessionId, List<Guid> team1, List<Guid> team2, DateTime createdAt)
+
+    private bool MatchExistsInCompleted(Match candidateMatch, List<Match> completedMatches)
+    {
+        var candidateTeam1 = candidateMatch.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).OrderBy(id => id).ToList();
+        var candidateTeam2 = candidateMatch.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).OrderBy(id => id).ToList();
+        
+        return completedMatches.Any(m =>
+        {
+            var team1 = m.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).OrderBy(id => id).ToList();
+            var team2 = m.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).OrderBy(id => id).ToList();
+            
+            // Check both orientations: team1 vs team2 OR team2 vs team1
+            return (team1.SequenceEqual(candidateTeam1) && team2.SequenceEqual(candidateTeam2)) ||
+                   (team1.SequenceEqual(candidateTeam2) && team2.SequenceEqual(candidateTeam1));
+        });
+    }
+
+    private Match CreateMatch(Guid sessionId, List<Guid> team1, List<Guid> team2)
     {
         var match = new Match
         {
@@ -289,7 +236,7 @@ public class MatchGenerator : IMatchGenerator
             SessionId = sessionId,
             IsGenerated = true,
             IsCompleted = false,
-            CreatedAt = createdAt,
+            CreatedAt = DateTime.UtcNow,
             MatchTeams = new List<MatchTeam>()
         };
         
@@ -315,111 +262,7 @@ public class MatchGenerator : IMatchGenerator
         
         return match;
     }
-
-    private void UpdatePlayerStatsAfterMatch(Dictionary<Guid, PlayerMatchStats> stats, Match match)
-    {
-        // When generating new matches in batch, temporarily track them as "pending"
-        // but these don't affect priority calculation in the next generation cycle
-        foreach (var mt in match.MatchTeams.Where(mt => stats.ContainsKey(mt.UserId)))
-        {
-            stats[mt.UserId].PendingMatches++;
-            stats[mt.UserId].TotalMatches++;
-            stats[mt.UserId].Priority = stats[mt.UserId].ExpectedMatches - stats[mt.UserId].TotalMatches;
-            
-            var playerTeamNumber = mt.TeamNumber;
-            foreach (var otherMt in match.MatchTeams.Where(other => other.UserId != mt.UserId))
-            {
-                if (otherMt.TeamNumber == playerTeamNumber)
-                {
-                    stats[mt.UserId].RecentTeammates.Add(otherMt.UserId);
-                    if (stats[mt.UserId].RecentTeammates.Count > 10)
-                        stats[mt.UserId].RecentTeammates.RemoveAt(0);
-                }
-                else
-                {
-                    stats[mt.UserId].RecentOpponents.Add(otherMt.UserId);
-                    if (stats[mt.UserId].RecentOpponents.Count > 10)
-                        stats[mt.UserId].RecentOpponents.RemoveAt(0);
-                }
-            }
-        }
-    }
     
-    private double CalculateMatchupDiversityScore(List<Guid> team1, List<Guid> team2, Dictionary<Guid, PlayerMatchStats> stats)
-    {
-        double diversityScore = 0;
-        double priorityScore = 0;
-        var allPlayers = team1.Concat(team2).ToList();
-        
-        // Calculate diversity score
-        foreach (var player in allPlayers)
-        {
-            if (!stats.ContainsKey(player)) continue;
-            var playerStats = stats[player];
-            
-            // Add priority bonus to ensure high-priority players get selected
-            priorityScore += playerStats.Priority;
-            
-            foreach (var teammate in team1.Contains(player) ? team1 : team2)
-            {
-                if (teammate == player) continue;
-                if (!playerStats.RecentTeammates.Contains(teammate)) diversityScore += 2;
-                else diversityScore -= playerStats.RecentTeammates.Count(t => t == teammate);
-            }
-            
-            foreach (var opponent in team1.Contains(player) ? team2 : team1)
-            {
-                if (!playerStats.RecentOpponents.Contains(opponent)) diversityScore += 1;
-                else diversityScore -= playerStats.RecentOpponents.Count(o => o == opponent) * 0.5;
-            }
-        }
-        
-        // Weight priority significantly higher than diversity (100x multiplier)
-        // This ensures fairness is prioritized while still considering diversity
-        return diversityScore + (priorityScore * 100.0);
-    }
-
-    private bool MatchupExists(Guid player1, Guid player2, List<Match> completed, List<Match> newMatches)
-    {
-        var allMatches = completed.Concat(newMatches);
-        return allMatches.Any(m =>
-            m.MatchTeams.Count == 2 &&
-            m.MatchTeams.Any(mt => mt.UserId == player1) &&
-            m.MatchTeams.Any(mt => mt.UserId == player2));
-    }
-
-    private bool TeamMatchupExists(List<Guid> team1, List<Guid> team2, List<Match> completed, List<Match> newMatches)
-    {
-        var allMatches = completed.Concat(newMatches);
-        return allMatches.Any(m =>
-        {
-            var team1Players = m.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList();
-            var team2Players = m.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList();
-            
-            // Check if team sizes match first
-            if (team1Players.Count != team1.Count || team2Players.Count != team2.Count)
-                return false;
-            
-            // Check if teams match (considering both orientations)
-            return (team1.All(id => team1Players.Contains(id)) && team1Players.Count == team1.Count &&
-                    team2.All(id => team2Players.Contains(id)) && team2Players.Count == team2.Count) ||
-                   (team1.All(id => team2Players.Contains(id)) && team2Players.Count == team1.Count &&
-                    team2.All(id => team1Players.Contains(id)) && team1Players.Count == team2.Count);
-        });
-    }
-
-    private bool TwoVsOneMatchupExists(List<Guid> team, Guid solo, List<Match> completed, List<Match> newMatches)
-    {
-        var allMatches = completed.Concat(newMatches);
-        return allMatches.Any(m =>
-        {
-            var teamPlayers = m.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList();
-            var soloPlayers = m.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList();
-            
-            return team.All(id => teamPlayers.Contains(id)) && soloPlayers.Contains(solo);
-        });
-    }
-
     private class PlayerMatchStats
     {
         public Guid UserId { get; set; }

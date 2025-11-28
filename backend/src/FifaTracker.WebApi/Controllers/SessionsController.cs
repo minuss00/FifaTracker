@@ -1,7 +1,8 @@
+using FifaTracker.Application.Matches.GetCompletedMatches;
+using FifaTracker.Application.Matches.GetPendingMatches;
 using FifaTracker.Application.Sessions.Commands.AddUserToSession;
 using FifaTracker.Application.Sessions.Commands.CreateSession;
 using FifaTracker.Application.Sessions.Commands.EndSession;
-using FifaTracker.Application.Sessions.Commands.GenerateMoreMatches;
 using FifaTracker.Application.Sessions.Commands.PauseUserInSession;
 using FifaTracker.Application.Sessions.Commands.ResumeUserInSession;
 using FifaTracker.Application.Sessions.Queries.GetActiveSessions;
@@ -68,18 +69,6 @@ public class SessionsController : ControllerBase
         return NoContent();
     }
 
-    [HttpPost("{id}/generate-matches")]
-    [UpdateSessionActivity]
-    public async Task<ActionResult<int>> GenerateMoreMatches(Guid id, [FromBody] GenerateMatchesRequest? request)
-    {
-        var count = await _mediator.Send(new GenerateMoreMatchesCommand 
-        { 
-            SessionId = id, 
-            TargetCount = request?.TargetCount ?? 5 
-        });
-        return Ok(new { generatedCount = count });
-    }
-
     [HttpPost("{id}/users/{userId}/pause")]
     [UpdateSessionActivity]
     public async Task<IActionResult> PauseUser(Guid id, Guid userId)
@@ -94,5 +83,21 @@ public class SessionsController : ControllerBase
     {
         await _mediator.Send(new ResumeUserInSessionCommand(id, userId));
         return NoContent();
+    }
+
+    [HttpGet("{id}/pending-matches")]
+    [UpdateSessionActivity]
+    public async Task<ActionResult<List<Domain.Entities.Match>>> GetPendingMatches(Guid id)
+    {
+        var matches = await _mediator.Send(new GetPendingMatchesQuery(id));
+        return Ok(matches);
+    }
+
+    [HttpGet("{id}/completed-matches")]
+    [UpdateSessionActivity]
+    public async Task<ActionResult<List<Domain.Entities.Match>>> GetCompletedMatches(Guid id)
+    {
+        var matches = await _mediator.Send(new GetCompletedMatchesQuery(id));
+        return Ok(matches);
     }
 }

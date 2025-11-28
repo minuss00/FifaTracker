@@ -56,12 +56,57 @@ function SessionDetail() {
     }
   }, [id]);
 
+  const matchCombinationsEqual = (match1: any, match2: any) => {
+    const team1_1 = match1.team1Players.map((p: any) => p.userId).sort();
+    const team2_1 = match1.team2Players.map((p: any) => p.userId).sort();
+    const team1_2 = match2.team1Players.map((p: any) => p.userId).sort();
+    const team2_2 = match2.team2Players.map((p: any) => p.userId).sort();
+    
+    // Check both orientations
+    const forward = JSON.stringify(team1_1) === JSON.stringify(team1_2) && 
+                    JSON.stringify(team2_1) === JSON.stringify(team2_2);
+    const reverse = JSON.stringify(team1_1) === JSON.stringify(team2_2) && 
+                    JSON.stringify(team2_1) === JSON.stringify(team1_2);
+    
+    return forward || reverse;
+  };
+
   const loadSession = async () => {
     if (!id) return;
     try {
       setLoading(true);
-      const response = await sessionsApi.getById(id);
-      setSession(response.data);
+      const [sessionResponse, pendingResponse, completedResponse] = await Promise.all([
+        sessionsApi.getById(id),
+        sessionsApi.getPendingMatches(id),
+        sessionsApi.getCompletedMatches(id)
+      ]);
+      
+      // DON'T combine - keep them separate
+      // Pending contains ALL combinations (sorted by priority)
+      // Completed contains only played matches (sorted by date)
+      
+      // Mark which pending matches are actually completed
+      const completedMatchesData = completedResponse.data;
+      const allCombinations = pendingResponse.data.map(pendingMatch => {
+        // Check if this combination exists in completed matches
+        const completedVersion = completedMatchesData.find(cm => 
+          matchCombinationsEqual(pendingMatch, cm)
+        );
+        
+        if (completedVersion) {
+          // Return the completed version with scores
+          return completedVersion;
+        }
+        
+        // Return pending match as-is
+        return pendingMatch;
+      });
+      
+      setSession({
+        ...sessionResponse.data,
+        matches: allCombinations, // ALL combinations with completed ones having scores
+        completedMatches: completedMatchesData // Only for stats/leaderboard
+      });
     } catch (err: any) {
       console.error('Failed to load session:', err);
     } finally {
@@ -123,18 +168,7 @@ function SessionDetail() {
     });
   };
 
-  const handleGenerateMoreMatches = async () => {
-    if (!id) return;
-    try {
-      const response = await sessionsApi.generateMoreMatches(id, 5);
-      loadSession();
-      if (response.data.generatedCount > 0) {
-        console.log(`Generated ${response.data.generatedCount} new matches`);
-      }
-    } catch (err: any) {
-      console.error('Failed to generate more matches:', err);
-    }
-  };
+
 
   const handleEndSession = () => {
     if (!id) return;
@@ -222,8 +256,9 @@ function SessionDetail() {
       });
     });
 
-    // Calculate stats from completed matches
-    session.matches.forEach(match => {
+    // Calculate stats from completed matches only
+    const completedMatches = session.completedMatches || session.matches.filter(m => m.isCompleted);
+    completedMatches.forEach(match => {
       if (!match.isCompleted || match.team1Score === undefined || match.team2Score === undefined) return;
 
       const team1Score = match.team1Score;
@@ -325,31 +360,17 @@ function SessionDetail() {
       return true;
     });
 
-    // Apply sorting: pending first (custom → generated), then completed (oldest → newest)
+    // Sorting is already handled by backend:
+    // - Pending matches: custom first (Priority=Double.MaxValue), then by calculated priority
+    // - Completed matches: sorted by PlayedAt DESC (most recent first)
+    // Just separate pending from completed and maintain order
     const sorted = [...filtered];
     sorted.sort((a, b) => {
-      // Pending matches first
+      // Keep pending before completed
       if (a.isCompleted !== b.isCompleted) {
         return a.isCompleted ? 1 : -1;
       }
-      
-      // Within pending: custom first, then generated (sorted by createdAt)
-      if (!a.isCompleted && !b.isCompleted) {
-        if (a.isGenerated !== b.isGenerated) {
-          return a.isGenerated ? 1 : -1; // custom (!isGenerated) first
-        }
-        // Within same type (both generated or both custom), sort by createdAt (oldest first)
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      }
-      
-      // Within completed: oldest first (by playedAt)
-      if (a.isCompleted && b.isCompleted) {
-        if (a.playedAt && b.playedAt) {
-          return new Date(a.playedAt).getTime() - new Date(b.playedAt).getTime();
-        }
-        return 0;
-      }
-      
+      // Within each group, maintain backend order (already sorted correctly)
       return 0;
     });
 
@@ -386,13 +407,6 @@ function SessionDetail() {
               >
                 <span className="btn-icon">⚽</span>
                 <span className="btn-text">Custom Match</span>
-              </button>
-              <button
-                onClick={handleGenerateMoreMatches}
-                className="btn btn-success btn-icon-mobile"
-              >
-                <span className="btn-icon">🔄</span>
-                <span className="btn-text">Generate Matches</span>
               </button>
               <button onClick={handleEndSession} className="btn btn-danger btn-icon-mobile">
                 <span className="btn-icon">🛑</span>
@@ -487,7 +501,7 @@ function SessionDetail() {
           className={`tab ${activeTab === 'matches' ? 'active' : ''}`}
           onClick={() => setActiveTab('matches')}
         >
-          Matches ({session.matches.filter(m => m.isCompleted).length}/{session.matches.length})
+          Matches ({(session.completedMatches || []).length}/{session.matches.length})
         </button>
         <button
           className={`tab ${activeTab === 'leaderboard' ? 'active' : ''}`}
@@ -544,7 +558,7 @@ function SessionDetail() {
                           checked={showCompleted}
                           onChange={(e) => setShowCompleted(e.target.checked)}
                         />
-                        <span>Completed ({session.matches.filter(m => m.isCompleted).length})</span>
+                        <span>Completed ({(session.completedMatches || []).length})</span>
                       </label>
                       <label className="checkbox-label">
                         <input
@@ -552,7 +566,7 @@ function SessionDetail() {
                           checked={showPending}
                           onChange={(e) => setShowPending(e.target.checked)}
                         />
-                        <span>Pending ({session.matches.filter(m => !m.isCompleted).length})</span>
+                        <span>Pending ({session.matches.length - (session.completedMatches || []).length})</span>
                       </label>
                     </div>
                   </div>
@@ -674,7 +688,7 @@ function SessionDetail() {
               </table>
             </div>
 
-            {session.matches.filter(m => m.isCompleted).length === 0 && (
+            {(session.completedMatches || []).length === 0 && (
               <p className="empty-state">No completed matches yet. Play some matches to see the leaderboard!</p>
             )}
           </div>

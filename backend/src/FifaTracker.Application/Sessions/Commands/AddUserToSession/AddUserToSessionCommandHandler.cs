@@ -1,4 +1,3 @@
-using FifaTracker.Application.Services;
 using FifaTracker.Domain.Entities;
 using FifaTracker.Domain.Interfaces;
 using MediatR;
@@ -9,12 +8,10 @@ namespace FifaTracker.Application.Sessions.Commands.AddUserToSession;
 public class AddUserToSessionCommandHandler : IRequestHandler<AddUserToSessionCommand, Unit>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMatchGenerator _matchGenerator;
 
-    public AddUserToSessionCommandHandler(IApplicationDbContext context, IMatchGenerator matchGenerator)
+    public AddUserToSessionCommandHandler(IApplicationDbContext context)
     {
         _context = context;
-        _matchGenerator = matchGenerator;
     }
 
     public async Task<Unit> Handle(AddUserToSessionCommand request, CancellationToken cancellationToken)
@@ -55,34 +52,7 @@ public class AddUserToSessionCommandHandler : IRequestHandler<AddUserToSessionCo
         {
             _context.Matches.Remove(match);
         }
-
-        // Get all users including the new one
-        var allSessionUsers = session.SessionUsers.ToList();
-        allSessionUsers.Add(sessionUser);
         
-        var allUserIds = allSessionUsers.Select(su => su.UserId).ToList();
-        
-        // Get remaining matches (completed + custom pending)
-        var existingMatches = await _context.Matches
-            .Where(m => m.SessionId == request.SessionId && (m.IsCompleted || !m.IsGenerated))
-            .Include(m => m.MatchTeams)
-            .ToListAsync(cancellationToken);
-        
-        // Generate 5 new matches considering all users and their activity
-        var newMatches = _matchGenerator.GenerateSmartMatches(
-            session.Id,
-            allUserIds,
-            allSessionUsers,
-            session.MatchType,
-            5, // Always generate 5 pending matches
-            existingMatches,
-            session.StartDate);
-
-        foreach (var match in newMatches)
-        {
-            _context.Matches.Add(match);
-        }
-
         session.LastModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
 

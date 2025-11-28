@@ -25,4 +25,8 @@
     <ProjectReference Include="..\..\src\FifaTracker.Domain\FifaTracker.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Services\" />
+  </ItemGroup>
+
 </Project>

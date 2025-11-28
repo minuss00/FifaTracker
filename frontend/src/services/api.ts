@@ -58,6 +58,7 @@ export interface SessionDetails {
   matchType: 'OneVsOne' | 'TwoVsTwo' | 'TwoVsOne';
   users: SessionUser[];
   matches: Match[];
+  completedMatches?: Match[]; // Only completed matches for leaderboard calculations
 }
 
 export interface SessionUser {
@@ -116,13 +117,13 @@ export const sessionsApi = {
   getAll: () => api.get<SessionSummary[]>('/sessions'),
   getActive: () => api.get<SessionSummary[]>('/sessions/active'),
   getById: (id: string) => api.get<SessionDetails>(`/sessions/${id}`),
+  getPendingMatches: (id: string) => api.get<Match[]>(`/sessions/${id}/pending-matches`),
+  getCompletedMatches: (id: string) => api.get<Match[]>(`/sessions/${id}/completed-matches`),
   create: (name: string, matchType: string, userIds: string[]) =>
     api.post<string>('/sessions', { Name: name, MatchType: matchType, UserIds: userIds }),
   end: (id: string) => api.post(`/sessions/${id}/end`),
   addUser: (id: string, userId: string) =>
     api.post(`/sessions/${id}/users`, { UserId: userId }),
-  generateMoreMatches: (id: string, targetCount: number = 5) =>
-    api.post<{ generatedCount: number }>(`/sessions/${id}/generate-matches`, { TargetCount: targetCount }),
   pauseUser: (id: string, userId: string) =>
     api.post(`/sessions/${id}/users/${userId}/pause`),
   resumeUser: (id: string, userId: string) =>

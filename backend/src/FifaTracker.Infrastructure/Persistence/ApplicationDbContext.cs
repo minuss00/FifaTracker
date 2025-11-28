@@ -21,6 +21,10 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
+        
+        // Ignore Priority property - it's calculated on-demand, not persisted
+        modelBuilder.Entity<Match>()
+            .Ignore(m => m.Priority);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

@@ -36,37 +36,7 @@ public class ResumeUserInSessionCommandHandler : IRequestHandler<ResumeUserInSes
         sessionUser.IsActiveInSession = true;
         sessionUser.LastResumedAt = now;
         sessionUser.PausedAt = null;
-
-        var existingMatches = await _context.GetMatchesForSessionAsync(request.SessionId, cancellationToken);
-        _context.RemovePendingGeneratedMatches(existingMatches);
-
-        var activeSessionUsers = session.SessionUsers.Where(su => su.IsActiveInSession).ToList();
-        var activeUserIds = activeSessionUsers.Select(su => su.UserId).ToList();
-
-        var minPlayers = session.MatchType switch
-        {
-            Domain.Entities.MatchType.OneVsOne => 2,
-            Domain.Entities.MatchType.TwoVsOne => 3,
-            _ => 4
-        };
-
-        if (activeUserIds.Count >= minPlayers)
-        {
-            var newMatches = _matchGenerator.GenerateSmartMatches(
-                session.Id,
-                activeUserIds,
-                activeSessionUsers,
-                session.MatchType,
-                5,
-                existingMatches,
-                session.StartDate);
-
-            foreach (var match in newMatches)
-            {
-                _context.Matches.Add(match);
-            }
-        }
-
+        
         session.LastModifiedAt = now;
         await _context.SaveChangesAsync(cancellationToken);
 

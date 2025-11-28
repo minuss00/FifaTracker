@@ -91,22 +91,7 @@ public class CreateSessionCommandHandler : IRequestHandler<CreateSessionCommand,
             _context.SessionUsers.Add(sessionUser);
             sessionUsers.Add(sessionUser);
         }
-
-        // Generate initial 5 matches using smart generation
-        var matches = _matchGenerator.GenerateSmartMatches(
-            session.Id, 
-            request.UserIds,
-            sessionUsers,
-            request.MatchType, 
-            5, // Target 5 matches on session start
-            new List<Match>(),
-            session.StartDate);
         
-        foreach (var match in matches)
-        {
-            _context.Matches.Add(match);
-        }
-
         await _context.SaveChangesAsync(cancellationToken);
 
         return session.Id;

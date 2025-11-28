@@ -10,6 +10,10 @@
     <PackageReference Include="MediatR" Version="13.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Sessions\Commands\GenerateMoreMatches\" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

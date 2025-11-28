@@ -13,6 +13,10 @@ public class Match
     public DateTime? PlayedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? LastModifiedAt { get; set; }
+    
+    // Priority for pending matches (not persisted to database, calculated on-demand)
+    // Custom matches always have Double.MaxValue priority to appear first
+    public double Priority { get; set; }
 
     // Navigation properties
     public ICollection<MatchTeam> MatchTeams { get; set; } = new List<MatchTeam>();
