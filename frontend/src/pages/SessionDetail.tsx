@@ -211,6 +211,28 @@ function SessionDetail() {
       });
     });
 
+    // Also include any players who appear in completed matches but are no longer listed in session.users
+    // so their historical stats are preserved in the leaderboard.
+    session.matches.forEach(match => {
+      if (!match.isCompleted) return;
+      match.team1Players.concat(match.team2Players).forEach((p: any) => {
+        if (!stats.has(p.userId)) {
+          stats.set(p.userId, {
+            userId: p.userId,
+            userName: p.userName || 'Unknown',
+            matches: 0,
+            wins: 0,
+            draws: 0,
+            losses: 0,
+            goalsScored: 0,
+            goalsConceded: 0,
+            goalDifference: 0,
+            points: 0,
+          });
+        }
+      });
+    });
+
     // Calculate stats from completed matches
     session.matches.forEach(match => {
       if (!match.isCompleted || match.team1Score === undefined || match.team2Score === undefined) return;
