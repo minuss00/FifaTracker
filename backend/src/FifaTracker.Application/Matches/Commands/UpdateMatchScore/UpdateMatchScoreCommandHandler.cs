@@ -25,18 +25,12 @@ public class UpdateMatchScoreCommandHandler : IRequestHandler<UpdateMatchScoreCo
         if (match == null)
             throw new KeyNotFoundException($"Match with ID {request.MatchId} not found");
 
-        match.Team1Score = request.Team1Score;
-        match.Team2Score = request.Team2Score;
-        match.IsCompleted = true;
-        match.PlayedAt = DateTime.UtcNow;
+        if (!match.IsCompleted)
+            throw new InvalidOperationException($"Match with ID {request.MatchId} is not completed yet");
+
         match.LastModifiedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
-
-        // Increment TimesPlayed in cache for this combination
-        var team1Ids = match.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList();
-        var team2Ids = match.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList();
-        _cache.IncrementTimesPlayed(match.SessionId, team1Ids, team2Ids);
 
         return Unit.Value;
     }

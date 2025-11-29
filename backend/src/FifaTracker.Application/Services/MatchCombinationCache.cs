@@ -9,7 +9,7 @@ public class CachedMatchCombination
     public List<Guid> Team1UserIds { get; set; } = new();
     public List<Guid> Team2UserIds { get; set; } = new();
     public int TimesPlayed { get; set; }
-    public double Priority { get; set; } // Calculated in MatchGenerator, not stored in cache
+    public double Priority { get; set; } // Not stored in cache
 }
 
 /// <summary>
