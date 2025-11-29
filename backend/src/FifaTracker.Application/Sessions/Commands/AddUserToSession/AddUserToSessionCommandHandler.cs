@@ -42,18 +42,7 @@ public class AddUserToSessionCommandHandler : IRequestHandler<AddUserToSessionCo
             JoinedAt = DateTime.UtcNow
         };
         _context.SessionUsers.Add(sessionUser);
-
-        // Remove all pending generated matches (keep completed and custom matches)
-        var pendingGeneratedMatches = await _context.Matches
-            .Where(m => m.SessionId == request.SessionId && !m.IsCompleted && m.IsGenerated)
-            .ToListAsync(cancellationToken);
-
-        foreach (var match in pendingGeneratedMatches)
-        {
-            _context.Matches.Remove(match);
-        }
         
-        session.LastModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
 
         return Unit.Value;

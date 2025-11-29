@@ -31,9 +31,9 @@ public class CreateSessionCommandHandler : IRequestHandler<CreateSessionCommand,
         }
 
         // Validate user count
-        if (request.UserIds == null || request.UserIds.Count == 0)
+        if (request.UserIds == null || request.UserIds.Count < 2)
         {
-            throw new InvalidOperationException("Session must have at least one player.");
+            throw new InvalidOperationException("Session must have at least two players.");
         }
 
         // Validate that all users exist and are active
@@ -57,7 +57,6 @@ public class CreateSessionCommandHandler : IRequestHandler<CreateSessionCommand,
         {
             Domain.Entities.MatchType.OneVsOne => 2,
             Domain.Entities.MatchType.TwoVsTwo => 4,
-            Domain.Entities.MatchType.TwoVsOne => 3,
             _ => 2
         };
 

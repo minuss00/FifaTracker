@@ -1,3 +1,4 @@
+
 namespace FifaTracker.Application.Services;
 
 /// <summary>
@@ -89,6 +90,18 @@ public class MatchCombinationCache : IMatchCombinationCache
             if (_cache.TryGetValue(key, out var combo))
             {
                 combo.TimesPlayed++;
+            }
+        }
+    }
+
+    public void ClearMatchCombinations(Guid sessionId)
+    {
+        lock (_lock)
+        {
+            var toRemove = _cache.Where(kvp => kvp.Key.StartsWith($"{sessionId}_"));
+            foreach (var kvp in toRemove)
+            {
+                _cache.Remove(kvp.Key);
             }
         }
     }

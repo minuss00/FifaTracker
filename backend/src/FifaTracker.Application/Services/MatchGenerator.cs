@@ -10,11 +10,21 @@ public class MatchGenerator : IMatchGenerator
 {
     private readonly IApplicationDbContext _context;
     private readonly IMatchCombinationCache _cache;
+    private readonly Dictionary<Domain.Entities.MatchType, Func<CachedMatchCombination, List<CachedMatchCombination>, List<SessionUser>, Match?, int, DateTime, double>> _priorityCalculators;
 
     public MatchGenerator(IApplicationDbContext context, IMatchCombinationCache cache)
     {
         _context = context;
         _cache = cache;
+
+        // Initialize lookup table
+        _priorityCalculators = new Dictionary<Domain.Entities.MatchType, Func<CachedMatchCombination, List<CachedMatchCombination>, List<SessionUser>, Match?, int, DateTime, double>>
+        {
+            [Domain.Entities.MatchType.OneVsOne] = (combo, combs, users, last, minPlayed, now) =>
+                CalculatePriorityOneVsOne(combo, combs, users, last, minPlayed, now),
+            [Domain.Entities.MatchType.TwoVsTwo] = (combo, combs, users, last, minPlayed, now) =>
+                CalculatePriorityTwoVsTwo(combo, combs, users, last, minPlayed, now)
+        };
     }
 
     public async Task<List<MatchDto>> GetPendingMatchesAsync(Session session, CancellationToken cancellationToken)
@@ -47,10 +57,10 @@ public class MatchGenerator : IMatchGenerator
         if (!_cache.HasCombinationsForSession(session.Id))
         {
             var newCombinations = GenerateAllCombinations(session.Id, activeUserIds, session.MatchType);
-            
+
             // Initialize TimesPlayed from existing completed matches
             InitializeTimesPlayed(newCombinations, completedMatches, customPendingMatches);
-            
+
             _cache.StoreCombinationsForSession(session.Id, newCombinations);
         }
 
@@ -67,7 +77,7 @@ public class MatchGenerator : IMatchGenerator
             cachedCombinations,
             session.SessionUsers.ToList(),
             lastMatch,
-            session.StartDate);
+            session.MatchType);
 
         // Convert to DTOs
         var userNameLookup = session.SessionUsers.ToDictionary(su => su.UserId, su => su.User.Name);
@@ -77,26 +87,31 @@ public class MatchGenerator : IMatchGenerator
             .ToList();
 
         var customMatchDtos = customPendingMatches
-            .Select(m => new MatchDto(
-                m.Id,
-                false, // IsGenerated = false for custom matches
-                false, // IsCompleted = false
-                m.Team1Score,
-                m.Team2Score,
-                m.PlayedAt,
-                m.MatchTeams
-                    .Where(mt => mt.TeamNumber == 1)
-                    .Select(mt => new MatchPlayerDto(mt.UserId, userNameLookup.GetValueOrDefault(mt.UserId, "Unknown")))
-                    .ToList(),
-                m.MatchTeams
-                    .Where(mt => mt.TeamNumber == 2)
-                    .Select(mt => new MatchPlayerDto(mt.UserId, userNameLookup.GetValueOrDefault(mt.UserId, "Unknown")))
-                    .ToList()
-            ))
+            .Select(m => NewMethod(m, userNameLookup))
             .ToList();
 
         // Return custom matches first, then generated matches
         return customMatchDtos.Concat(generatedMatchDtos).ToList();
+    }
+
+    private static MatchDto NewMethod(Match m, Dictionary<Guid, string> userNameLookup)
+    {
+        return new MatchDto(
+                        m.Id,
+                        false,
+                        false,
+                        m.Team1Score,
+                        m.Team2Score,
+                        m.PlayedAt,
+                        m.MatchTeams
+                            .Where(mt => mt.TeamNumber == 1)
+                            .Select(mt => new MatchPlayerDto(mt.UserId, userNameLookup.GetValueOrDefault(mt.UserId, "Unknown")))
+                            .ToList(),
+                        m.MatchTeams
+                            .Where(mt => mt.TeamNumber == 2)
+                            .Select(mt => new MatchPlayerDto(mt.UserId, userNameLookup.GetValueOrDefault(mt.UserId, "Unknown")))
+                            .ToList()
+                    );
     }
 
     private List<CachedMatchCombination> GenerateAllCombinations(
@@ -108,7 +123,6 @@ public class MatchGenerator : IMatchGenerator
         {
             Domain.Entities.MatchType.OneVsOne => GenerateOneVsOne(sessionId, userIds),
             Domain.Entities.MatchType.TwoVsTwo => GenerateTwoVsTwo(sessionId, userIds),
-            Domain.Entities.MatchType.TwoVsOne => GenerateTwoVsOne(sessionId, userIds),
             _ => new List<CachedMatchCombination>()
         };
     }
@@ -183,35 +197,6 @@ public class MatchGenerator : IMatchGenerator
         return combinations;
     }
 
-    private List<CachedMatchCombination> GenerateTwoVsOne(Guid sessionId, List<Guid> userIds)
-    {
-        var combinations = new List<CachedMatchCombination>();
-        if (userIds.Count < 3) return combinations;
-
-        for (int solo = 0; solo < userIds.Count; solo++)
-        {
-            for (int i = 0; i < userIds.Count - 1; i++)
-            {
-                if (i == solo) continue;
-
-                for (int j = i + 1; j < userIds.Count; j++)
-                {
-                    if (j == solo) continue;
-
-                    combinations.Add(new CachedMatchCombination
-                    {
-                        SessionId = sessionId,
-                        Team1UserIds = new List<Guid> { userIds[i], userIds[j] },
-                        Team2UserIds = new List<Guid> { userIds[solo] },
-                        TimesPlayed = 0
-                    });
-                }
-            }
-        }
-
-        return combinations;
-    }
-
     private void InitializeTimesPlayed(
         List<CachedMatchCombination> combinations,
         List<Match> completedMatches,
@@ -252,21 +237,22 @@ public class MatchGenerator : IMatchGenerator
         List<CachedMatchCombination> combinations,
         List<SessionUser> sessionUsers,
         Match? lastMatch,
-        DateTime sessionStartTime)
+        Domain.Entities.MatchType matchType)
     {
         var now = DateTime.UtcNow;
-
         var minTimesPlayed = combinations.Min(c => c.TimesPlayed);
+        var calculator = _priorityCalculators.GetValueOrDefault(matchType)
+            ?? throw new ArgumentOutOfRangeException(nameof(matchType), matchType, "Unsupported match type");
 
         foreach (var combo in combinations)
         {
-            combo.Priority = CalculatePriority(combo, combinations, sessionUsers, lastMatch, minTimesPlayed, now);
+            combo.Priority = calculator(combo, combinations, sessionUsers, lastMatch, minTimesPlayed, now);
         }
 
         return combinations.OrderByDescending(c => c.Priority).ToList();
     }
 
-    private double CalculatePriority(
+    private double CalculatePriorityOneVsOne(
         CachedMatchCombination combo,
         List<CachedMatchCombination> combinations,
         List<SessionUser> sessionUsers,
@@ -274,40 +260,8 @@ public class MatchGenerator : IMatchGenerator
         int minTimesPlayed,
         DateTime now)
     {
-        // FIRST: Check if any team from last match repeats - highest priority check
-        if (lastMatch != null)
-        {
-            var lastTeam1 = lastMatch.MatchTeams
-                .Where(mt => mt.TeamNumber == 1)
-                .Select(mt => mt.UserId)
-                .OrderBy(id => id)
-                .ToList();
-            var lastTeam2 = lastMatch.MatchTeams
-                .Where(mt => mt.TeamNumber == 2)
-                .Select(mt => mt.UserId)
-                .OrderBy(id => id)
-                .ToList();
-            var currentTeam1 = combo.Team1UserIds.OrderBy(id => id).ToList();
-            var currentTeam2 = combo.Team2UserIds.OrderBy(id => id).ToList();
-
-            var teamRepeatsSameOrientation = lastTeam1.SequenceEqual(currentTeam1) || lastTeam2.SequenceEqual(currentTeam2);
-            var teamRepeatsReversed = lastTeam1.SequenceEqual(currentTeam2) || lastTeam2.SequenceEqual(currentTeam1);
-
-            if (teamRepeatsSameOrientation || teamRepeatsReversed)
-            {
-                return double.MinValue; // Extremely high penalty
-            }
-        }
-
         var fairnessScore = 0.0;
 
-        // If this match was played more than minimum AND not all have been played, penalize
-        if (combo.TimesPlayed > minTimesPlayed)
-        {
-            fairnessScore += -1000.0 - (combo.TimesPlayed * 100); // Penalty increases with times played
-        }
-
-        // Calculate fairness score based on time-proportional fairness
         var maxActiveTime = sessionUsers.Max(su => su.GetCurrentActiveTotalHours(now));
         var maxMatchesPlayed = sessionUsers.Max(su =>
         {
@@ -344,14 +298,102 @@ public class MatchGenerator : IMatchGenerator
         {
             var lastMatchPlayerIds = lastMatch.MatchTeams.Select(mt => mt.UserId).ToList();
             var repeatCount = playerIds.Count(pid => lastMatchPlayerIds.Contains(pid));
-            repetitionPenalty = repeatCount * 50.0;
+            repetitionPenalty = repeatCount * 100.0;
+        }
+
+        //Bonus for matches played fewer times
+        var timesPlayedBonus = (minTimesPlayed - combo.TimesPlayed) * 50.0;
+
+        return fairnessScore - repetitionPenalty + timesPlayedBonus;
+    }
+
+    private double CalculatePriorityTwoVsTwo(
+        CachedMatchCombination combo,
+        List<CachedMatchCombination> combinations,
+        List<SessionUser> sessionUsers,
+        Match? lastMatch,
+        int minTimesPlayed,
+        DateTime now)
+    {
+        // FIRST: Check if any team from last match repeats - highest priority check
+        if (lastMatch != null)
+        {
+            var lastTeam1 = lastMatch.MatchTeams
+                .Where(mt => mt.TeamNumber == 1)
+                .Select(mt => mt.UserId)
+                .OrderBy(id => id)
+                .ToList();
+            var lastTeam2 = lastMatch.MatchTeams
+                .Where(mt => mt.TeamNumber == 2)
+                .Select(mt => mt.UserId)
+                .OrderBy(id => id)
+                .ToList();
+            var currentTeam1 = combo.Team1UserIds.OrderBy(id => id).ToList();
+            var currentTeam2 = combo.Team2UserIds.OrderBy(id => id).ToList();
+
+            var teamRepeatsSameOrientation = lastTeam1.SequenceEqual(currentTeam1) || lastTeam2.SequenceEqual(currentTeam2);
+            var teamRepeatsReversed = lastTeam1.SequenceEqual(currentTeam2) || lastTeam2.SequenceEqual(currentTeam1);
+
+            if (teamRepeatsSameOrientation || teamRepeatsReversed)
+            {
+                return double.MaxValue; // Extremely high penalty
+            }
+        }
+
+        var fairnessScore = 0.0;
+
+        // If this match was played more than minimum AND not all have been played, penalize
+        //if (combo.TimesPlayed > minTimesPlayed)
+        //{
+        //    fairnessScore += -1000.0 - (combo.TimesPlayed * 1000); // Penalty increases with times played
+        //}
+
+        // Calculate fairness score based on time-proportional fairness
+        var maxActiveTime = sessionUsers.Max(su => su.GetCurrentActiveTotalHours(now));
+        var maxMatchesPlayed = sessionUsers.Max(su =>
+        {
+            var count = combinations
+                .Where(c => c.TimesPlayed > 0)
+                .Where(c => c.Team1UserIds.Contains(su.UserId) || c.Team2UserIds.Contains(su.UserId))
+                .Sum(c => c.TimesPlayed);
+            return count;
+        });
+
+        var playerIds = combo.Team1UserIds.Concat(combo.Team2UserIds).ToList();
+        foreach (var playerId in playerIds)
+        {
+            var sessionUser = sessionUsers.FirstOrDefault(su => su.UserId == playerId);
+            if (sessionUser == null) continue;
+
+            var activeTime = sessionUser.GetCurrentActiveTotalHours(now);
+
+            var playerMatchCount = combinations
+                .Where(c => c.TimesPlayed > 0)
+                .Where(c => c.Team1UserIds.Contains(playerId) || c.Team2UserIds.Contains(playerId))
+                .Sum(c => c.TimesPlayed);
+
+            var timeRatio = maxActiveTime > 0 ? activeTime / maxActiveTime : 1.0;
+            var expectedMatches = maxMatchesPlayed * timeRatio;
+
+            var matchesDeficit = expectedMatches - playerMatchCount;
+            fairnessScore += matchesDeficit * 100.0 * timeRatio;
+        }
+
+        // Penalty for repetition: if any player was in the last match
+        var repetitionPenalty = 0.0;
+        if (lastMatch != null)
+        {
+            var lastMatchPlayerIds = lastMatch.MatchTeams.Select(mt => mt.UserId).ToList();
+            var repeatCount = playerIds.Count(pid => lastMatchPlayerIds.Contains(pid));
+            repetitionPenalty = repeatCount * 500.0;
         }
 
         // Bonus for matches played fewer times
-        var timesPlayedBonus = (minTimesPlayed - combo.TimesPlayed) * 100.0;
+        //var timesPlayedBonus = (minTimesPlayed - combo.TimesPlayed) * 100.0;
 
-        return (fairnessScore * 100.0) + timesPlayedBonus - repetitionPenalty;
+        return fairnessScore - repetitionPenalty;
     }
+
 
     private MatchDto ConvertToMatchDto(CachedMatchCombination combo, Dictionary<Guid, string> userNameLookup)
     {

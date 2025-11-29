@@ -25,6 +25,5 @@ public enum SessionStatus
 public enum MatchType
 {
     OneVsOne,
-    TwoVsTwo,
-    TwoVsOne
+    TwoVsTwo
 }

@@ -43,7 +43,7 @@ export interface SessionSummary {
   name: string;
   startDate: string;
   status: 'Active' | 'Completed';
-  matchType: 'OneVsOne' | 'TwoVsTwo' | 'TwoVsOne';
+  matchType: 'OneVsOne' | 'TwoVsTwo';
   totalMatches: number;
   completedMatches: number;
   participantCount: number;
@@ -55,7 +55,7 @@ export interface SessionDetails {
   startDate: string;
   endDate?: string;
   status: 'Active' | 'Completed';
-  matchType: 'OneVsOne' | 'TwoVsTwo' | 'TwoVsOne';
+  matchType: 'OneVsOne' | 'TwoVsTwo';
   users: SessionUser[];
   matches: Match[];
   completedMatches?: Match[]; // Only completed matches for leaderboard calculations

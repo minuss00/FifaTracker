@@ -1,6 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <Compile Remove="Sessions\Commands\GenerateMoreMatches\**" />
+    <EmbeddedResource Remove="Sessions\Commands\GenerateMoreMatches\**" />
+    <None Remove="Sessions\Commands\GenerateMoreMatches\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\FifaTracker.Domain\FifaTracker.Domain.csproj" />
   </ItemGroup>
 
@@ -8,10 +14,6 @@
     <PackageReference Include="FluentValidation" Version="12.0.0" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.0.0" />
     <PackageReference Include="MediatR" Version="13.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Sessions\Commands\GenerateMoreMatches\" />
   </ItemGroup>
 
   <PropertyGroup>

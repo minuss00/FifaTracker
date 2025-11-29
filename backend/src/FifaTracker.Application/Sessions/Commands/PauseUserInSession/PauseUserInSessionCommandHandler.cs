@@ -1,4 +1,3 @@
-using FifaTracker.Application.Services;
 using FifaTracker.Domain.Extensions;
 using FifaTracker.Domain.Interfaces;
 using MediatR;
@@ -9,12 +8,10 @@ namespace FifaTracker.Application.Sessions.Commands.PauseUserInSession;
 public class PauseUserInSessionCommandHandler : IRequestHandler<PauseUserInSessionCommand, Unit>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMatchGenerator _matchGenerator;
 
-    public PauseUserInSessionCommandHandler(IApplicationDbContext context, IMatchGenerator matchGenerator)
+    public PauseUserInSessionCommandHandler(IApplicationDbContext context)
     {
         _context = context;
-        _matchGenerator = matchGenerator;
     }
 
     public async Task<Unit> Handle(PauseUserInSessionCommand request, CancellationToken cancellationToken)
@@ -38,7 +35,6 @@ public class PauseUserInSessionCommandHandler : IRequestHandler<PauseUserInSessi
         sessionUser.IsActiveInSession = false;
         sessionUser.PausedAt = now;
         
-        session.LastModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
 
         return Unit.Value;

@@ -1,3 +1,4 @@
+using FifaTracker.Application.Services;
 using FifaTracker.Domain.Entities;
 using FifaTracker.Domain.Interfaces;
 using MediatR;
@@ -8,10 +9,12 @@ namespace FifaTracker.Application.Sessions.Commands.EndSession;
 public class EndSessionCommandHandler : IRequestHandler<EndSessionCommand, Unit>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IMatchCombinationCache _cache;
 
-    public EndSessionCommandHandler(IApplicationDbContext context)
+    public EndSessionCommandHandler(IApplicationDbContext context, IMatchCombinationCache cache)
     {
         _context = context;
+        _cache = cache; 
     }
 
     public async Task<Unit> Handle(EndSessionCommand request, CancellationToken cancellationToken)
@@ -33,6 +36,8 @@ public class EndSessionCommandHandler : IRequestHandler<EndSessionCommand, Unit>
             .ToListAsync(cancellationToken);
 
         _context.Matches.RemoveRange(incompleteMatches);
+
+        _cache.ClearMatchCombinations(session.Id);
 
         return Unit.Value;
     }

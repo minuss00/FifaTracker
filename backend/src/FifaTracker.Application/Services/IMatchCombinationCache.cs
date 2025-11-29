@@ -34,4 +34,10 @@ public interface IMatchCombinationCache
     /// Increment times played for a specific combination (when match is completed)
     /// </summary>
     void IncrementTimesPlayed(Guid sessionId, List<Guid> team1UserIds, List<Guid> team2UserIds);
+
+    /// <summary>
+    /// Clear all match combinations for the given session
+    /// </summary>
+    void ClearMatchCombinations(Guid sessionId);
+
 }

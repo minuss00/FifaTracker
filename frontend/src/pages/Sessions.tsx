@@ -93,7 +93,6 @@ function Sessions() {
     switch (matchType) {
       case 'OneVsOne': return '1v1';
       case 'TwoVsTwo': return '2v2';
-      case 'TwoVsOne': return '2v1';
       default: return matchType;
     }
   };
@@ -131,7 +130,7 @@ function Sessions() {
           <div className="form-group">
             <label>Match Type</label>
             <div className="match-type-buttons">
-              {['OneVsOne', 'TwoVsTwo', 'TwoVsOne'].map((type) => (
+              {['OneVsOne', 'TwoVsTwo'].map((type) => (
                 <button
                   key={type}
                   type="button"

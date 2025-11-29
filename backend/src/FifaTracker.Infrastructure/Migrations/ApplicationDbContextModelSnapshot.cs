@@ -52,9 +52,6 @@ namespace FifaTracker.Infrastructure.Migrations
                     b.Property<int?>("Team2Score")
                         .HasColumnType("integer");
 
-                    b.Property<int>("TimesPlayed")
-                        .HasColumnType("integer");
-
                     b.HasKey("Id");
 
                     b.HasIndex("IsCompleted");
