@@ -19,7 +19,15 @@ public class GetAllUsersQueryHandler : IRequestHandler<GetAllUsersQuery, List<Us
             .AsNoTracking()
             .Where(u => u.IsActive)
             .OrderBy(u => u.Name)
-            .Select(u => new UserDto(u.Id, u.Name, u.CreatedAt))
+            .Select(u => new UserDto(
+                u.Id,
+                u.Name,
+                u.CreatedAt,
+                null,
+                0,
+                0,
+                CardStatus.None
+            ))
             .ToListAsync(cancellationToken);
     }
 }

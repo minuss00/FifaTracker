@@ -29,6 +29,10 @@ export interface User {
   id: string;
   name: string;
   createdAt: string;
+  lastSessionDate: string | null;
+  totalSessionsCount: number;
+  totalTimeSpentMinutes: number;
+  cardStatus: 'None' | 'Yellow' | 'Red';
 }
 
 export interface InactiveUser {
@@ -104,6 +108,7 @@ export interface LeaderboardEntry {
 // Users API
 export const usersApi = {
   getAll: () => api.get<User[]>('/users'),
+  getWithStats: () => api.get<User[]>('/users/with-stats'),
   getInactive: () => api.get<InactiveUser[]>('/users/inactive'),
   getLeaderboard: () => api.get<LeaderboardEntry[]>('/users/leaderboard'),
   create: (name: string) => api.post<string>('/users', { Name: name }),

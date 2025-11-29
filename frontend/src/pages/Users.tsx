@@ -6,6 +6,18 @@ import './Users.css';
 
 type Tab = 'active' | 'inactive';
 
+function formatMinutes(minutes: number): string {
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (remainingMinutes === 0) {
+    return `${hours}h`;
+  }
+  return `${hours}h ${remainingMinutes}m`;
+}
+
 function Users() {
   const [activeTab, setActiveTab] = useState<Tab>('active');
   const [users, setUsers] = useState<User[]>([]);
@@ -32,7 +44,7 @@ function Users() {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const response = await usersApi.getAll();
+      const response = await usersApi.getWithStats();
       setUsers(response.data);
       setError(null);
     } catch (err) {
@@ -246,10 +258,40 @@ function Users() {
               users.map((user) => (
                 <div key={user.id} className="user-card">
                   <div className="user-info">
-                    <h3>{user.name}</h3>
-                    <p className="user-date">
-                      Created: {new Date(user.createdAt).toLocaleDateString()}
-                    </p>
+                    <div className="user-header">
+                      <h3>{user.name}</h3>
+                      {user.cardStatus !== 'None' && (
+                        <span className={`card-badge card-${user.cardStatus.toLowerCase()}`}>
+                          {user.cardStatus === 'Yellow' ? '🟨' : '🟥'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="user-stats">
+                      <div className="stat-item">
+                        <span className="stat-icon">📅</span>
+                        <span className="stat-label">Created:</span>
+                        <span className="stat-value">{new Date(user.createdAt).toLocaleDateString()}</span>
+                      </div>
+                      <div className="stat-item">
+                        <span className="stat-icon">🎮</span>
+                        <span className="stat-label">Sessions:</span>
+                        <span className="stat-value">{user.totalSessionsCount}</span>
+                      </div>
+                      <div className="stat-item">
+                        <span className="stat-icon">⏱️</span>
+                        <span className="stat-label">Total time:</span>
+                        <span className="stat-value">{formatMinutes(user.totalTimeSpentMinutes)}</span>
+                      </div>
+                      <div className="stat-item">
+                        <span className="stat-icon">👤</span>
+                        <span className="stat-label">Last seen:</span>
+                        <span className="stat-value">
+                          {user.lastSessionDate 
+                            ? new Date(user.lastSessionDate).toLocaleDateString()
+                            : 'Never'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                   <div className="button-group">
                     <button

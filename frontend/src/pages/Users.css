@@ -73,9 +73,73 @@
   background: #f9f9f9;
 }
 
-.user-info h3 {
-  margin: 0 0 0.5rem 0;
+.user-info {
+  flex: 1;
+}
+
+.user-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.user-header h3 {
+  margin: 0;
   color: #333;
+  font-size: 1.3rem;
+}
+
+.card-badge {
+  font-size: 1.3rem;
+  display: inline-flex;
+  align-items: center;
+  animation: pulse 2s infinite;
+}
+
+.card-badge.card-yellow {
+  filter: drop-shadow(0 0 3px rgba(255, 193, 7, 0.5));
+}
+
+.card-badge.card-red {
+  filter: drop-shadow(0 0 3px rgba(220, 53, 69, 0.5));
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.user-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.stat-icon {
+  font-size: 1rem;
+}
+
+.stat-label {
+  font-weight: 500;
+  color: #888;
+}
+
+.stat-value {
+  color: #333;
+  font-weight: 600;
 }
 
 .user-date {
@@ -131,6 +195,12 @@
   }
 }
 
+@media (max-width: 768px) {
+  .user-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 480px) {
   .users-page {
     padding: 10px;
@@ -158,12 +228,21 @@
     padding: 1rem;
   }
 
-  .user-info h3 {
+  .user-header h3 {
     font-size: 1.1rem;
   }
 
   .user-date {
     font-size: 0.85rem;
+  }
+
+  .user-stats {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .stat-item {
+    font-size: 0.8rem;
   }
 
   .button-group {

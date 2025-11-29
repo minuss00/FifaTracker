@@ -5,6 +5,7 @@ using FifaTracker.Application.Users.Commands.UpdateUser;
 using FifaTracker.Application.Users.Queries.GetAllUsers;
 using FifaTracker.Application.Users.Queries.GetInactiveUsers;
 using FifaTracker.Application.Users.Queries.GetLeaderboard;
+using FifaTracker.Application.Users.Queries.GetUsersWithStats;
 using FifaTracker.WebApi.Requests;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -26,6 +27,13 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<List<UserDto>>> GetAll()
     {
         var users = await _mediator.Send(new GetAllUsersQuery());
+        return Ok(users);
+    }
+
+    [HttpGet("with-stats")]
+    public async Task<ActionResult<List<UserDto>>> GetWithStats()
+    {
+        var users = await _mediator.Send(new GetUsersWithStatsQuery());
         return Ok(users);
     }
 

@@ -1,33 +1,38 @@
-# FIFA Tracker
+# ⚽ FIFA Tracker
 
 Aplikacja do śledzenia statystyk meczów FIFA granych ze znajomymi z inteligentnym systemem generowania meczów opartym na czasie aktywności graczy.
 
 ## 🎮 Funkcjonalności
 
-### Zarządzanie Sesjami
-- **Sesje gier** (1v1, 2v2, 2v1) z automatycznym generowaniem meczów
+### 🎯 Zarządzanie Sesjami
+- **Typy gier** - 1v1 i 2v2 z automatycznym generowaniem meczów
 - **Smart Match Generation** - algorytm priorytetowy zapewniający sprawiedliwy podział meczów
 - **Pause/Resume** - możliwość wstrzymania gracza bez utraty historii
-- **Activity Tracking** - śledzenie czasu aktywności każdego gracza
+- **Activity Tracking** - precyzyjne śledzenie czasu aktywności każdego gracza
 - **Dynamiczne regenerowanie** - mecze dostosowują się do aktualnych priorytetów
+- **Middleware tracking** - automatyczna aktualizacja czasu aktywności przy każdej akcji
 
-### Gracze & Statystyki
-- **Zarządzanie użytkownikami** (soft delete - historia meczów zachowana)
+### 👥 Gracze & Statystyki
+- **Zarządzanie użytkownikami** - soft delete z zachowaniem pełnej historii meczów
 - **Reactivate** - przywracanie nieaktywnych użytkowników
-- **Leaderboard** - dwa tryby: Standard Scoring i Effectiveness Scoring
-- **Statystyki per sesja** - wyniki, bramki, różnica bramek
+- **Leaderboard** - dwa tryby punktacji:
+  - **Standard Scoring** - 3 punkty za wygraną, 1 za remis
+  - **Effectiveness Scoring** - współczynnik wygranych/przegranych
+- **Statystyki per sesja** - wyniki, bramki, różnica bramek, czas aktywności
 
-### Mecze
+### ⚡ Mecze
 - **Tworzenie customowych meczów** - dowolne kombinacje graczy
-- **Automatyczne generowanie** - zawsze 5 pending meczów
+- **Automatyczne generowanie** - zawsze 5 pending meczów gotowych do gry
 - **Uniqueness first** - priorytet unikalnych kombinacji
 - **Real-time updates** - natychmiastowa aktualizacja po dodaniu wyniku
+- **Smart caching** - optymalizacja wydajności przez cachowanie kombinacji
 
-### Progressive Web App (PWA)
-- **Instalacja na urządzeniach mobilnych** (iOS/Android)
+### 📱 Progressive Web App (PWA)
+- **Instalacja na urządzeniach mobilnych** - iOS i Android
 - **Offline cache** - działanie bez połączenia z internetem
 - **Apple meta tags** - pełne wsparcie dla iOS
 - **Service Worker** - cache-first strategy dla assetów
+- **Responsive design** - hamburger menu na urządzeniach mobilnych
 
 ## 🚀 Szybki start
 
@@ -50,35 +55,39 @@ Zobacz: [QUICK_START_PRODUCTION.md](./QUICK_START_PRODUCTION.md)
 ## 💻 Stack Technologiczny
 
 ### Backend
-- **.NET 9** - latest LTS
-- **Clean Architecture** - Domain/Application/Infrastructure/WebApi
-- **CQRS** - MediatR pattern
-- **EF Core 9** - Code-First migrations
+- **.NET 9** - najnowsza wersja LTS
+- **Clean Architecture** - separacja warstw Domain/Application/Infrastructure/WebApi
+- **CQRS Pattern** - MediatR dla command/query separation
+- **EF Core 9** - Code-First migrations z PostgreSQL
 - **PostgreSQL 16** - relacyjna baza danych
-- **Middleware** - attribute-based cross-cutting concerns
+- **Custom Middleware** - SessionActivityMiddleware dla automatycznego trackingu
+- **Attribute-based design** - UpdateSessionActivityAttribute dla deklaratywnego trackingu
 
 ### Frontend
-- **React 19** - najnowsza wersja
+- **React 19** - najnowsza wersja z Concurrent Features
 - **TypeScript** - type-safe development
-- **Vite 6** - szybki bundler
-- **PWA** - Progressive Web App support
-- **Component-based architecture** - reusable components
+- **Vite 6** - ultra-szybki bundler z HMR
+- **React Router** - routing po stronie klienta
+- **Axios** - HTTP client z interceptorami
+- **PWA Support** - Service Worker + Manifest
+- **Component-based** - modalne dialogi, toast notifications
 
 ### Infrastructure
-- **Docker & Docker Compose** - containerization
-- **Multi-stage builds** - optymalizacja obrazów
-- **nginx** - reverse proxy i static files
-- **Cloudflare Tunnel** - bezpieczny dostęp zdalny
+- **Docker & Docker Compose** - pełna konteneryzacja
+- **Multi-stage builds** - zoptymalizowane obrazy produkcyjne
+- **nginx** - reverse proxy i serving static files
+- **Cloudflare Tunnel** - bezpieczny dostęp zdalny bez otwierania portów
 
 ## 📱 Dostęp z telefonu (sieć lokalna)
 
-```powershell
-# Lub ręcznie:
-# 1. Znajdź IP: ipconfig
-# 2. Utwórz frontend/.env: VITE_API_BASE_URL=http://192.168.1.X:5000/api
-# 3. Restart: docker-compose up --build -d
-# 4. Otwórz: http://192.168.1.X:3000 na telefonie
-```
+1. **Znajdź swoje IP**: `ipconfig` (Windows) lub `ifconfig` (Linux/Mac)
+2. **Utwórz plik** `frontend/.env`:
+   ```
+   VITE_API_BASE_URL=http://192.168.1.X:5000/api
+   ```
+3. **Restart**: `docker-compose up --build -d`
+4. **Otwórz w telefonie**: `http://192.168.1.X:3000`
+5. **Zainstaluj jako PWA** - użyj opcji "Dodaj do ekranu głównego"
 
 ## 🔧 Zmienne środowiskowe
 
@@ -99,8 +108,25 @@ VITE_API_BASE_URL=http://localhost:5000/api
 
 **CORS (produkcja):**
 ```env
-ALLOWED_ORIGINS=https://twoja-domena.com
+ALLOWED_ORIGINS=https://twoja-domena.com,https://app.twoja-domena.com
 ```
+
+## 🏗️ Architektura
+
+### Backend - Clean Architecture
+```
+FifaTracker.Domain      → Entities, Interfaces
+FifaTracker.Application → CQRS Handlers, Services, DTOs
+FifaTracker.Infrastructure → EF Core, Persistence
+FifaTracker.WebApi      → Controllers, Middleware, Attributes
+```
+
+### Kluczowe komponenty
+- **MatchGenerator** - inteligentny system generowania meczów z priorytetami
+- **MatchCombinationCache** - cachowanie kombinacji dla wydajności
+- **SessionActivityMiddleware** - automatyczny tracking czasu aktywności
+- **UpdateSessionActivityAttribute** - deklaratywne oznaczanie endpointów
+
 ## 📝 Licencja
 
 MIT
