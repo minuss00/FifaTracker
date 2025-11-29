@@ -30,7 +30,7 @@ function SessionDetail() {
   const [customMatchError, setCustomMatchError] = useState<string | null>(null);
   const [showAddUser, setShowAddUser] = useState(false);
   const [showCustomMatch, setShowCustomMatch] = useState(false);
-  const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'leaderboard' | 'players'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'leaderboard' | 'players'>('completed');
   const [leaderboardMode, setLeaderboardMode] = useState<'standard' | 'effectiveness'>('standard');
   const [showGenerated, setShowGenerated] = useState(true);
   const [showCustom, setShowCustom] = useState(true);
@@ -58,21 +58,31 @@ function SessionDetail() {
     if (!id) return;
     try {
       setLoading(true);
-      const [sessionResponse, pendingResponse, completedResponse] = await Promise.all([
-        sessionsApi.getById(id),
-        sessionsApi.getPendingMatches(id),
+      
+      // First get basic session info
+      const sessionResponse = await sessionsApi.getById(id);
+      const isCompleted = sessionResponse.data.status === 'Completed';
+      
+      // Only fetch pending matches for active sessions
+      const requests = [
+        Promise.resolve(sessionResponse),
+        isCompleted ? Promise.resolve({ data: [] }) : sessionsApi.getPendingMatches(id),
         sessionsApi.getCompletedMatches(id)
-      ]);
+      ];
       
-      // Keep pending and completed separate
-      // Pending contains ALL combinations (sorted by priority) - backend always returns all
-      // Completed contains only played matches (sorted by date)
+      const [sessionResp, pendingResponse, completedResponse] = await Promise.all(requests);
       
-      setSession({
-        ...sessionResponse.data,
-        matches: pendingResponse.data, // ALL combinations from backend
-        completedMatches: completedResponse.data // Only played matches
-      });
+      const sessionData = {
+        ...sessionResp.data,
+        matches: pendingResponse.data, // Empty array for completed sessions
+        completedMatches: completedResponse.data
+      };
+      setSession(sessionData);
+      
+      // Set initial tab based on session status
+      if (sessionData.status === 'Completed' && activeTab === 'pending') {
+        setActiveTab('completed');
+      }
     } catch (err: any) {
       console.error('Failed to load session:', err);
     } finally {
@@ -446,12 +456,14 @@ function SessionDetail() {
       </Modal>
 
       <div className="tabs">
-        <button
-          className={`tab ${activeTab === 'pending' ? 'active' : ''}`}
-          onClick={() => setActiveTab('pending')}
-        >
-          Pending Matches ({session.matches.length})
-        </button>
+        {session.status === 'Active' && (
+          <button
+            className={`tab ${activeTab === 'pending' ? 'active' : ''}`}
+            onClick={() => setActiveTab('pending')}
+          >
+            Pending Matches ({session.matches.length})
+          </button>
+        )}
         <button
           className={`tab ${activeTab === 'completed' ? 'active' : ''}`}
           onClick={() => setActiveTab('completed')}
