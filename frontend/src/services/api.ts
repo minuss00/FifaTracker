@@ -134,6 +134,14 @@ export const sessionsApi = {
 export const matchesApi = {
   createCustom: (sessionId: string, team1UserIds: string[], team2UserIds: string[]) =>
     api.post<string>('/matches', { SessionId: sessionId, Team1UserIds: team1UserIds, Team2UserIds: team2UserIds }),
+  completeMatch: (sessionId: string, team1UserIds: string[], team2UserIds: string[], team1Score: number, team2Score: number) =>
+    api.post<string>('/matches/complete', { 
+      SessionId: sessionId, 
+      Team1UserIds: team1UserIds, 
+      Team2UserIds: team2UserIds,
+      Team1Score: team1Score,
+      Team2Score: team2Score
+    }),
   updateScore: (id: string, team1Score: number, team2Score: number) =>
     api.put(`/matches/${id}/score`, { Team1Score: team1Score, Team2Score: team2Score }),
   delete: (id: string) => api.delete(`/matches/${id}`),

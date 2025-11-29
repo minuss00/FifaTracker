@@ -14,6 +14,7 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(assembly);
 
         services.AddScoped<IMatchGenerator, MatchGenerator>();
+        services.AddScoped<IMatchCombinationCache, MatchCombinationCache>();
 
         return services;
     }

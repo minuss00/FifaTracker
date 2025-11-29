@@ -87,7 +87,7 @@ public class SessionsController : ControllerBase
 
     [HttpGet("{id}/pending-matches")]
     [UpdateSessionActivity]
-    public async Task<ActionResult<List<Domain.Entities.Match>>> GetPendingMatches(Guid id)
+    public async Task<ActionResult<List<SessionDetailsDto>>> GetPendingMatches(Guid id)
     {
         var matches = await _mediator.Send(new GetPendingMatchesQuery(id));
         return Ok(matches);
@@ -95,7 +95,7 @@ public class SessionsController : ControllerBase
 
     [HttpGet("{id}/completed-matches")]
     [UpdateSessionActivity]
-    public async Task<ActionResult<List<Domain.Entities.Match>>> GetCompletedMatches(Guid id)
+    public async Task<ActionResult<List<MatchDto>>> GetCompletedMatches(Guid id)
     {
         var matches = await _mediator.Send(new GetCompletedMatchesQuery(id));
         return Ok(matches);

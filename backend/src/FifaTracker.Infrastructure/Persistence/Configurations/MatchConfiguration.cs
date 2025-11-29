@@ -24,6 +24,9 @@ public class MatchConfiguration : IEntityTypeConfiguration<Match>
         builder.Property(m => m.CreatedAt)
             .IsRequired();
 
+        // Priority is not persisted to database - calculated on-demand
+        builder.Ignore(m => m.Priority);
+
         builder.HasOne(m => m.Session)
             .WithMany(s => s.Matches)
             .HasForeignKey(m => m.SessionId)

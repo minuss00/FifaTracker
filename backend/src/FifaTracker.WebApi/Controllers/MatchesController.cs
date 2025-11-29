@@ -1,3 +1,4 @@
+using FifaTracker.Application.Matches.Commands.CompleteMatch;
 using FifaTracker.Application.Matches.Commands.CreateCustomMatch;
 using FifaTracker.Application.Matches.Commands.DeleteMatch;
 using FifaTracker.Application.Matches.Commands.UpdateMatchScore;
@@ -21,6 +22,14 @@ public class MatchesController : ControllerBase
 
     [HttpPost]
     public async Task<ActionResult<Guid>> CreateCustom([FromBody] CreateCustomMatchCommand command)
+    {
+        var matchId = await _mediator.Send(command);
+        return Ok(matchId);
+    }
+
+    [HttpPost("complete")]
+    [UpdateSessionActivity]
+    public async Task<ActionResult<Guid>> CompleteMatch([FromBody] CompleteMatchCommand command)
     {
         var matchId = await _mediator.Send(command);
         return Ok(matchId);

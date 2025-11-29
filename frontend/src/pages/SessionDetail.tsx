@@ -30,10 +30,8 @@ function SessionDetail() {
   const [customMatchError, setCustomMatchError] = useState<string | null>(null);
   const [showAddUser, setShowAddUser] = useState(false);
   const [showCustomMatch, setShowCustomMatch] = useState(false);
-  const [activeTab, setActiveTab] = useState<'matches' | 'leaderboard' | 'players'>('matches');
+  const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'leaderboard' | 'players'>('pending');
   const [leaderboardMode, setLeaderboardMode] = useState<'standard' | 'effectiveness'>('standard');
-  const [showCompleted, setShowCompleted] = useState(true);
-  const [showPending, setShowPending] = useState(true);
   const [showGenerated, setShowGenerated] = useState(true);
   const [showCustom, setShowCustom] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
@@ -56,21 +54,6 @@ function SessionDetail() {
     }
   }, [id]);
 
-  const matchCombinationsEqual = (match1: any, match2: any) => {
-    const team1_1 = match1.team1Players.map((p: any) => p.userId).sort();
-    const team2_1 = match1.team2Players.map((p: any) => p.userId).sort();
-    const team1_2 = match2.team1Players.map((p: any) => p.userId).sort();
-    const team2_2 = match2.team2Players.map((p: any) => p.userId).sort();
-    
-    // Check both orientations
-    const forward = JSON.stringify(team1_1) === JSON.stringify(team1_2) && 
-                    JSON.stringify(team2_1) === JSON.stringify(team2_2);
-    const reverse = JSON.stringify(team1_1) === JSON.stringify(team2_2) && 
-                    JSON.stringify(team2_1) === JSON.stringify(team1_2);
-    
-    return forward || reverse;
-  };
-
   const loadSession = async () => {
     if (!id) return;
     try {
@@ -81,31 +64,14 @@ function SessionDetail() {
         sessionsApi.getCompletedMatches(id)
       ]);
       
-      // DON'T combine - keep them separate
-      // Pending contains ALL combinations (sorted by priority)
+      // Keep pending and completed separate
+      // Pending contains ALL combinations (sorted by priority) - backend always returns all
       // Completed contains only played matches (sorted by date)
-      
-      // Mark which pending matches are actually completed
-      const completedMatchesData = completedResponse.data;
-      const allCombinations = pendingResponse.data.map(pendingMatch => {
-        // Check if this combination exists in completed matches
-        const completedVersion = completedMatchesData.find(cm => 
-          matchCombinationsEqual(pendingMatch, cm)
-        );
-        
-        if (completedVersion) {
-          // Return the completed version with scores
-          return completedVersion;
-        }
-        
-        // Return pending match as-is
-        return pendingMatch;
-      });
       
       setSession({
         ...sessionResponse.data,
-        matches: allCombinations, // ALL combinations with completed ones having scores
-        completedMatches: completedMatchesData // Only for stats/leaderboard
+        matches: pendingResponse.data, // ALL combinations from backend
+        completedMatches: completedResponse.data // Only played matches
       });
     } catch (err: any) {
       console.error('Failed to load session:', err);
@@ -143,7 +109,26 @@ function SessionDetail() {
     }
   };
 
-  const handleUpdateScore = async (matchId: string, team1Score: number, team2Score: number) => {
+  const handleAddScore = async (
+    sessionId: string,
+    team1UserIds: string[],
+    team2UserIds: string[],
+    team1Score: number, 
+    team2Score: number
+  ) => {
+    try {
+      await matchesApi.completeMatch(sessionId, team1UserIds, team2UserIds, team1Score, team2Score);
+      loadSession();
+    } catch (err: any) {
+      console.error('Failed to add score:', err);
+    }
+  };
+
+  const handleUpdateScore = async (
+    matchId: string, 
+    team1Score: number, 
+    team2Score: number
+  ) => {
     try {
       await matchesApi.updateScore(matchId, team1Score, team2Score);
       loadSession();
@@ -341,42 +326,6 @@ function SessionDetail() {
     }
   };
 
-  const getFilteredAndSortedMatches = () => {
-    if (!session) return [];
-
-    let filtered = session.matches;
-
-    // Apply status filters
-    filtered = filtered.filter(m => {
-      if (m.isCompleted && !showCompleted) return false;
-      if (!m.isCompleted && !showPending) return false;
-      return true;
-    });
-
-    // Apply type filters
-    filtered = filtered.filter(m => {
-      if (m.isGenerated && !showGenerated) return false;
-      if (!m.isGenerated && !showCustom) return false;
-      return true;
-    });
-
-    // Sorting is already handled by backend:
-    // - Pending matches: custom first (Priority=Double.MaxValue), then by calculated priority
-    // - Completed matches: sorted by PlayedAt DESC (most recent first)
-    // Just separate pending from completed and maintain order
-    const sorted = [...filtered];
-    sorted.sort((a, b) => {
-      // Keep pending before completed
-      if (a.isCompleted !== b.isCompleted) {
-        return a.isCompleted ? 1 : -1;
-      }
-      // Within each group, maintain backend order (already sorted correctly)
-      return 0;
-    });
-
-    return sorted;
-  };
-
   if (loading) return <div className="loading">Loading...</div>;
   if (!session) return <div className="error-message">Session not found</div>;
 
@@ -498,10 +447,16 @@ function SessionDetail() {
 
       <div className="tabs">
         <button
-          className={`tab ${activeTab === 'matches' ? 'active' : ''}`}
-          onClick={() => setActiveTab('matches')}
+          className={`tab ${activeTab === 'pending' ? 'active' : ''}`}
+          onClick={() => setActiveTab('pending')}
         >
-          Matches ({(session.completedMatches || []).length}/{session.matches.length})
+          Pending Matches ({session.matches.length})
+        </button>
+        <button
+          className={`tab ${activeTab === 'completed' ? 'active' : ''}`}
+          onClick={() => setActiveTab('completed')}
+        >
+          Completed Matches ({(session.completedMatches || []).length})
         </button>
         <button
           className={`tab ${activeTab === 'leaderboard' ? 'active' : ''}`}
@@ -536,7 +491,7 @@ function SessionDetail() {
             </div>
           </div>
         </div>
-      ) : activeTab === 'matches' ? (
+      ) : activeTab === 'pending' ? (
         <div className="session-content">
           <div className="matches-section full-width">
             <div className="matches-controls">
@@ -544,33 +499,11 @@ function SessionDetail() {
                 className="filters-toggle"
                 onClick={() => setShowFilters(!showFilters)}
               >
-                {showFilters ? '▼' : '▶'} Filters & Sort
+                {showFilters ? '▼' : '▶'} Filters
               </button>
               
               {showFilters && (
                 <div className="matches-filters">
-                  <div className="filter-section">
-                    <h4>Show Status:</h4>
-                    <div className="checkbox-group">
-                      <label className="checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={showCompleted}
-                          onChange={(e) => setShowCompleted(e.target.checked)}
-                        />
-                        <span>Completed ({(session.completedMatches || []).length})</span>
-                      </label>
-                      <label className="checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={showPending}
-                          onChange={(e) => setShowPending(e.target.checked)}
-                        />
-                        <span>Pending ({session.matches.length - (session.completedMatches || []).length})</span>
-                      </label>
-                    </div>
-                  </div>
-
                   <div className="filter-section">
                     <h4>Show Type:</h4>
                     <div className="checkbox-group">
@@ -580,7 +513,7 @@ function SessionDetail() {
                           checked={showGenerated}
                           onChange={(e) => setShowGenerated(e.target.checked)}
                         />
-                        <span>Generated ({session.matches.filter(m => m.isGenerated).length})</span>
+                        <span>Generated ({session.matches.filter(m => m.isGenerated && !m.isCompleted).length})</span>
                       </label>
                       <label className="checkbox-label">
                         <input
@@ -588,7 +521,7 @@ function SessionDetail() {
                           checked={showCustom}
                           onChange={(e) => setShowCustom(e.target.checked)}
                         />
-                        <span>Custom ({session.matches.filter(m => !m.isGenerated).length})</span>
+                        <span>Custom ({session.matches.filter(m => !m.isGenerated && !m.isCompleted).length})</span>
                       </label>
                     </div>
                   </div>
@@ -597,20 +530,88 @@ function SessionDetail() {
             </div>
 
             <div className="matches-list">
-              {session.matches.length === 0 ? (
-                <p className="empty-state">No matches generated yet</p>
-              ) : getFilteredAndSortedMatches().length === 0 ? (
+              {session.matches.filter(m => !m.isCompleted).length === 0 ? (
+                <p className="empty-state">All matches have been played!</p>
+              ) : session.matches.filter(m => !m.isCompleted && 
+                  (m.isGenerated ? showGenerated : showCustom)).length === 0 ? (
                 <p className="empty-state">No matches match the selected filters</p>
               ) : (
-                getFilteredAndSortedMatches().map((match) => (
-                  <MatchCard
-                    key={match.id}
-                    match={match}
-                    sessionStatus={session.status}
-                    onUpdateScore={handleUpdateScore}
-                    onDelete={handleDeleteMatch}
-                  />
-                ))
+                session.matches
+                  .filter(m => !m.isCompleted && (m.isGenerated ? showGenerated : showCustom))
+                  .map((match) => (
+                    <MatchCard
+                      key={match.id}
+                      match={match}
+                      sessionStatus={session.status}
+                      sessionId={session.id}
+                      onAddScore={handleAddScore}
+                      onUpdateScore={handleUpdateScore}
+                      onDelete={handleDeleteMatch}
+                    />
+                  ))
+              )}
+            </div>
+          </div>
+        </div>
+      ) : activeTab === 'completed' ? (
+        <div className="session-content">
+          <div className="matches-section full-width">
+            <div className="matches-controls">
+              <button 
+                className="filters-toggle"
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                {showFilters ? '▼' : '▶'} Filters
+              </button>
+              
+              {showFilters && (
+                <div className="matches-filters">
+                  <div className="filter-section">
+                    <h4>Show Type:</h4>
+                    <div className="checkbox-group">
+                      <label className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={showGenerated}
+                          onChange={(e) => setShowGenerated(e.target.checked)}
+                        />
+                        <span>Generated ({(session.completedMatches || []).filter(m => m.isGenerated).length})</span>
+                      </label>
+                      <label className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={showCustom}
+                          onChange={(e) => setShowCustom(e.target.checked)}
+                        />
+                        <span>Custom ({(session.completedMatches || []).filter(m => !m.isGenerated).length})</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="matches-list">
+              {(session.completedMatches || []).length === 0 ? (
+                <p className="empty-state">No completed matches yet</p>
+              ) : (session.completedMatches || [])
+                  .filter(m => m.isGenerated ? showGenerated : showCustom)
+                  .length === 0 ? (
+                <p className="empty-state">No matches match the selected filters</p>
+              ) : (
+                (session.completedMatches || [])
+                  .filter(m => m.isGenerated ? showGenerated : showCustom)
+                  .map((match) => (
+                    <MatchCard
+                      key={match.id}
+                      match={match}
+                      sessionStatus={session.status}
+                      sessionId={session.id}
+                      onAddScore={handleAddScore}
+                      onUpdateScore={handleUpdateScore}
+                      onDelete={handleDeleteMatch}
+                    />
+                  ))
               )}
             </div>
           </div>
@@ -712,11 +713,23 @@ function SessionDetail() {
 interface MatchCardProps {
   match: any;
   sessionStatus: 'Active' | 'Completed';
-  onUpdateScore: (matchId: string, team1Score: number, team2Score: number) => void;
+  sessionId: string;
+  onAddScore: (
+    sessionId: string,
+    team1UserIds: string[],
+    team2UserIds: string[],
+    team1Score: number, 
+    team2Score: number
+  ) => void;
+  onUpdateScore: (
+    matchId: string, 
+    team1Score: number, 
+    team2Score: number
+  ) => void;
   onDelete: (matchId: string) => void;
 }
 
-function MatchCard({ match, sessionStatus, onUpdateScore, onDelete }: MatchCardProps) {
+function MatchCard({ match, sessionStatus, sessionId, onAddScore, onUpdateScore, onDelete }: MatchCardProps) {
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [team1Score, setTeam1Score] = useState(match.team1Score ?? 0);
   const [team2Score, setTeam2Score] = useState(match.team2Score ?? 0);
@@ -731,7 +744,17 @@ function MatchCard({ match, sessionStatus, onUpdateScore, onDelete }: MatchCardP
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateScore(match.id, team1Score, team2Score);
+    const team1UserIds = match.team1Players.map((p: any) => p.userId);
+    const team2UserIds = match.team2Players.map((p: any) => p.userId);
+    
+    if (match.isCompleted) {
+      // Editing existing match - use update endpoint
+      onUpdateScore(match.id, team1Score, team2Score);
+    } else {
+      // Adding score to new match - use complete endpoint
+      onAddScore(sessionId, team1UserIds, team2UserIds, team1Score, team2Score);
+    }
+    
     setShowScoreModal(false);
   };
 
