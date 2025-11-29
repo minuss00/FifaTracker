@@ -57,10 +57,10 @@ public class MatchGenerator : IMatchGenerator
         if (!_cache.HasCombinationsForSession(session.Id))
         {
             var newCombinations = GenerateAllCombinations(session.Id, activeUserIds, session.MatchType);
-
+            
             // Initialize TimesPlayed from existing completed matches
             InitializeTimesPlayed(newCombinations, completedMatches, customPendingMatches);
-
+            
             _cache.StoreCombinationsForSession(session.Id, newCombinations);
         }
 
@@ -87,31 +87,26 @@ public class MatchGenerator : IMatchGenerator
             .ToList();
 
         var customMatchDtos = customPendingMatches
-            .Select(m => NewMethod(m, userNameLookup))
+            .Select(m => new MatchDto(
+                m.Id,
+                false, // IsGenerated = false for custom matches
+                false, // IsCompleted = false
+                m.Team1Score,
+                m.Team2Score,
+                m.PlayedAt,
+                m.MatchTeams
+                    .Where(mt => mt.TeamNumber == 1)
+                    .Select(mt => new MatchPlayerDto(mt.UserId, userNameLookup.GetValueOrDefault(mt.UserId, "Unknown")))
+                    .ToList(),
+                m.MatchTeams
+                    .Where(mt => mt.TeamNumber == 2)
+                    .Select(mt => new MatchPlayerDto(mt.UserId, userNameLookup.GetValueOrDefault(mt.UserId, "Unknown")))
+                    .ToList()
+            ))
             .ToList();
 
         // Return custom matches first, then generated matches
         return customMatchDtos.Concat(generatedMatchDtos).ToList();
-    }
-
-    private static MatchDto NewMethod(Match m, Dictionary<Guid, string> userNameLookup)
-    {
-        return new MatchDto(
-                        m.Id,
-                        false,
-                        false,
-                        m.Team1Score,
-                        m.Team2Score,
-                        m.PlayedAt,
-                        m.MatchTeams
-                            .Where(mt => mt.TeamNumber == 1)
-                            .Select(mt => new MatchPlayerDto(mt.UserId, userNameLookup.GetValueOrDefault(mt.UserId, "Unknown")))
-                            .ToList(),
-                        m.MatchTeams
-                            .Where(mt => mt.TeamNumber == 2)
-                            .Select(mt => new MatchPlayerDto(mt.UserId, userNameLookup.GetValueOrDefault(mt.UserId, "Unknown")))
-                            .ToList()
-                    );
     }
 
     private List<CachedMatchCombination> GenerateAllCombinations(
@@ -119,6 +114,11 @@ public class MatchGenerator : IMatchGenerator
         List<Guid> userIds,
         Domain.Entities.MatchType matchType)
     {
+        if (userIds.Count < 4)
+        {
+            return GenerateOneVsOne(sessionId, userIds);
+        }
+
         return matchType switch
         {
             Domain.Entities.MatchType.OneVsOne => GenerateOneVsOne(sessionId, userIds),
@@ -315,6 +315,8 @@ public class MatchGenerator : IMatchGenerator
         int minTimesPlayed,
         DateTime now)
     {
+        var fairnessScore = 0.0;
+
         // FIRST: Check if any team from last match repeats - highest priority check
         if (lastMatch != null)
         {
@@ -336,17 +338,9 @@ public class MatchGenerator : IMatchGenerator
 
             if (teamRepeatsSameOrientation || teamRepeatsReversed)
             {
-                return double.MaxValue; // Extremely high penalty
+                fairnessScore += -1000; // Extremely high penalty
             }
         }
-
-        var fairnessScore = 0.0;
-
-        // If this match was played more than minimum AND not all have been played, penalize
-        //if (combo.TimesPlayed > minTimesPlayed)
-        //{
-        //    fairnessScore += -1000.0 - (combo.TimesPlayed * 1000); // Penalty increases with times played
-        //}
 
         // Calculate fairness score based on time-proportional fairness
         var maxActiveTime = sessionUsers.Max(su => su.GetCurrentActiveTotalHours(now));
@@ -376,7 +370,7 @@ public class MatchGenerator : IMatchGenerator
             var expectedMatches = maxMatchesPlayed * timeRatio;
 
             var matchesDeficit = expectedMatches - playerMatchCount;
-            fairnessScore += matchesDeficit * 100.0 * timeRatio;
+            fairnessScore += matchesDeficit * 100.0;
         }
 
         // Penalty for repetition: if any player was in the last match
@@ -385,13 +379,13 @@ public class MatchGenerator : IMatchGenerator
         {
             var lastMatchPlayerIds = lastMatch.MatchTeams.Select(mt => mt.UserId).ToList();
             var repeatCount = playerIds.Count(pid => lastMatchPlayerIds.Contains(pid));
-            repetitionPenalty = repeatCount * 500.0;
+            repetitionPenalty = repeatCount * 100.0;
         }
 
-        // Bonus for matches played fewer times
-        //var timesPlayedBonus = (minTimesPlayed - combo.TimesPlayed) * 100.0;
+        //Bonus for matches played fewer times
+        var timesPlayedBonus = (minTimesPlayed - combo.TimesPlayed) * 50.0;
 
-        return fairnessScore - repetitionPenalty;
+        return fairnessScore - repetitionPenalty + timesPlayedBonus;
     }
 
 
