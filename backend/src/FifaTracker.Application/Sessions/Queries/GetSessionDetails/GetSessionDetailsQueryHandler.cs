@@ -36,16 +36,35 @@ public class GetSessionDetailsQueryHandler : IRequestHandler<GetSessionDetailsQu
             su.TotalActiveTime
         )).ToList();
 
-        var matches = session.Matches.Select(m => new MatchDto(
-            m.Id,
-            m.IsGenerated,
-            m.IsCompleted,
-            m.Team1Score,
-            m.Team2Score,
-            m.PlayedAt,
-            m.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => new MatchPlayerDto(mt.UserId, mt.User.Name)).ToList(),
-            m.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => new MatchPlayerDto(mt.UserId, mt.User.Name)).ToList()
-        )).ToList();
+        var completedMatches = session.Matches.Where(m => m.IsCompleted).ToList();
+        
+        var matches = session.Matches.Select(m =>
+        {
+            var team1Ids = m.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).OrderBy(id => id).ToList();
+            var team2Ids = m.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).OrderBy(id => id).ToList();
+            
+            // Count how many times this exact combination was played (completed)
+            var timesPlayed = completedMatches.Count(cm =>
+            {
+                var cmTeam1Ids = cm.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).OrderBy(id => id).ToList();
+                var cmTeam2Ids = cm.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).OrderBy(id => id).ToList();
+                
+                return (team1Ids.SequenceEqual(cmTeam1Ids) && team2Ids.SequenceEqual(cmTeam2Ids)) ||
+                       (team1Ids.SequenceEqual(cmTeam2Ids) && team2Ids.SequenceEqual(cmTeam1Ids));
+            });
+            
+            return new MatchDto(
+                m.Id,
+                m.IsGenerated,
+                m.IsCompleted,
+                m.Team1Score,
+                m.Team2Score,
+                m.PlayedAt,
+                m.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => new MatchPlayerDto(mt.UserId, mt.User.Name)).ToList(),
+                m.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => new MatchPlayerDto(mt.UserId, mt.User.Name)).ToList(),
+                timesPlayed
+            );
+        }).ToList();
 
         return new SessionDetailsDto(
             session.Id,

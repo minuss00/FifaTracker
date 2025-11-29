@@ -87,22 +87,33 @@ public class MatchGenerator : IMatchGenerator
             .ToList();
 
         var customMatchDtos = customPendingMatches
-            .Select(m => new MatchDto(
-                m.Id,
-                false, // IsGenerated = false for custom matches
-                false, // IsCompleted = false
-                m.Team1Score,
-                m.Team2Score,
-                m.PlayedAt,
-                m.MatchTeams
-                    .Where(mt => mt.TeamNumber == 1)
-                    .Select(mt => new MatchPlayerDto(mt.UserId, userNameLookup.GetValueOrDefault(mt.UserId, "Unknown")))
-                    .ToList(),
-                m.MatchTeams
-                    .Where(mt => mt.TeamNumber == 2)
-                    .Select(mt => new MatchPlayerDto(mt.UserId, userNameLookup.GetValueOrDefault(mt.UserId, "Unknown")))
-                    .ToList()
-            ))
+            .Select(m =>
+            {
+                var team1Ids = m.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).ToList();
+                var team2Ids = m.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).ToList();
+                var timesPlayed = completedMatches.Count(cm =>
+                    cm.MatchTeams.Where(mt => mt.TeamNumber == 1).Select(mt => mt.UserId).OrderBy(id => id).SequenceEqual(team1Ids.OrderBy(id => id)) &&
+                    cm.MatchTeams.Where(mt => mt.TeamNumber == 2).Select(mt => mt.UserId).OrderBy(id => id).SequenceEqual(team2Ids.OrderBy(id => id))
+                );
+                
+                return new MatchDto(
+                    m.Id,
+                    false, // IsGenerated = false for custom matches
+                    false, // IsCompleted = false
+                    m.Team1Score,
+                    m.Team2Score,
+                    m.PlayedAt,
+                    m.MatchTeams
+                        .Where(mt => mt.TeamNumber == 1)
+                        .Select(mt => new MatchPlayerDto(mt.UserId, userNameLookup.GetValueOrDefault(mt.UserId, "Unknown")))
+                        .ToList(),
+                    m.MatchTeams
+                        .Where(mt => mt.TeamNumber == 2)
+                        .Select(mt => new MatchPlayerDto(mt.UserId, userNameLookup.GetValueOrDefault(mt.UserId, "Unknown")))
+                        .ToList(),
+                    timesPlayed
+                );
+            })
             .ToList();
 
         // Return custom matches first, then generated matches
@@ -292,6 +303,18 @@ public class MatchGenerator : IMatchGenerator
             fairnessScore += matchesDeficit * 100.0;
         }
 
+        // Calculate average active time for players in this combo
+        var averageActiveTime = playerIds
+            .Select(pid => sessionUsers.FirstOrDefault(su => su.UserId == pid))
+            .Where(su => su != null)
+            .Average(su => su!.GetCurrentActiveTotalHours(now));
+
+        // Penalty for higher more times played than minimum
+        if (combo.TimesPlayed > minTimesPlayed)
+        {
+            fairnessScore -= ((combo.TimesPlayed - minTimesPlayed) * 50.0) * (averageActiveTime / maxActiveTime);
+        }
+
         // Penalty for repetition: if any player was in the last match
         var repetitionPenalty = 0.0;
         if (lastMatch != null)
@@ -405,7 +428,8 @@ public class MatchGenerator : IMatchGenerator
             combo.Team2UserIds.Select(id => new MatchPlayerDto(
                 id,
                 userNameLookup.GetValueOrDefault(id, "Unknown")
-            )).ToList()
+            )).ToList(),
+            combo.TimesPlayed
         );
     }
 

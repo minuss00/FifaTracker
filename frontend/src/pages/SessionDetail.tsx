@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { sessionsApi, matchesApi, usersApi, type SessionDetails, type User } from '../services/api';
+import { sessionsApi, matchesApi, usersApi, type SessionDetails, type User, type Match } from '../services/api';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import PlayerItem from '../components/PlayerItem';
@@ -64,17 +64,17 @@ function SessionDetail() {
       const isCompleted = sessionResponse.data.status === 'Completed';
       
       // Only fetch pending matches for active sessions
-      const requests = [
+      const requests: [Promise<any>, Promise<{ data: Match[] }>, Promise<{ data: Match[] }>] = [
         Promise.resolve(sessionResponse),
-        isCompleted ? Promise.resolve({ data: [] }) : sessionsApi.getPendingMatches(id),
+        isCompleted ? Promise.resolve({ data: [] as Match[] }) : sessionsApi.getPendingMatches(id),
         sessionsApi.getCompletedMatches(id)
       ];
       
       const [sessionResp, pendingResponse, completedResponse] = await Promise.all(requests);
       
-      const sessionData = {
+      const sessionData: SessionDetails = {
         ...sessionResp.data,
-        matches: pendingResponse.data, // Empty array for completed sessions
+        matches: pendingResponse.data,
         completedMatches: completedResponse.data
       };
       setSession(sessionData);
@@ -787,6 +787,11 @@ function MatchCard({ match, sessionStatus, sessionId, onAddScore, onUpdateScore,
         <span className="match-badge">
           {match.isGenerated ? '🤖 Auto' : '✏️ Custom'}
         </span>
+        {match.timesPlayed > 0 && (
+          <span className="match-played-count" title="Times this combination was played">
+            🔄 Played {match.timesPlayed}x
+          </span>
+        )}
         {match.isCompleted && match.playedAt && (
           <span className="match-date">
             {new Date(match.playedAt).toLocaleTimeString()}

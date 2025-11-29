@@ -84,6 +84,7 @@ export interface Match {
   playedAt?: string;
   team1Players: MatchPlayer[];
   team2Players: MatchPlayer[];
+  timesPlayed: number;
 }
 
 export interface MatchPlayer {

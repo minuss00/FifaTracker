@@ -33,7 +33,8 @@ public record MatchDto(
     int? Team2Score,
     DateTime? PlayedAt,
     List<MatchPlayerDto> Team1Players,
-    List<MatchPlayerDto> Team2Players
+    List<MatchPlayerDto> Team2Players,
+    int TimesPlayed
 );
 
 public record MatchPlayerDto(Guid UserId, string UserName);

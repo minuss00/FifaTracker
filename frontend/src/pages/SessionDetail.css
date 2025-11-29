@@ -723,6 +723,8 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .match-badge {
@@ -734,6 +736,16 @@
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.match-played-count {
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  background: #e3f2fd;
+  color: #1976d2;
+  border-radius: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .match-date {
