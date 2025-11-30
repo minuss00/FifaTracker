@@ -303,18 +303,6 @@ public class MatchGenerator : IMatchGenerator
             fairnessScore += matchesDeficit * 100.0;
         }
 
-        // Calculate average active time for players in this combo
-        var averageActiveTime = playerIds
-            .Select(pid => sessionUsers.FirstOrDefault(su => su.UserId == pid))
-            .Where(su => su != null)
-            .Average(su => su!.GetCurrentActiveTotalHours(now));
-
-        // Penalty for higher more times played than minimum
-        if (combo.TimesPlayed > minTimesPlayed)
-        {
-            fairnessScore -= ((combo.TimesPlayed - minTimesPlayed) * 50.0) * (averageActiveTime / maxActiveTime);
-        }
-
         // Penalty for repetition: if any player was in the last match
         var repetitionPenalty = 0.0;
         if (lastMatch != null)
@@ -390,10 +378,10 @@ public class MatchGenerator : IMatchGenerator
                 .Sum(c => c.TimesPlayed);
 
             var timeRatio = maxActiveTime > 0 ? activeTime / maxActiveTime : 1.0;
-            var expectedMatches = maxMatchesPlayed * timeRatio;
+            var expectedMatches = maxMatchesPlayed * (timeRatio < 0.3 ? 0.3 : timeRatio);
 
             var matchesDeficit = expectedMatches - playerMatchCount;
-            fairnessScore += matchesDeficit * 100.0;
+            fairnessScore += (matchesDeficit > 5 ? 5 : matchesDeficit) * 100.0;
         }
 
         // Penalty for repetition: if any player was in the last match
@@ -402,15 +390,15 @@ public class MatchGenerator : IMatchGenerator
         {
             var lastMatchPlayerIds = lastMatch.MatchTeams.Select(mt => mt.UserId).ToList();
             var repeatCount = playerIds.Count(pid => lastMatchPlayerIds.Contains(pid));
-            repetitionPenalty = repeatCount * 100.0;
+            repetitionPenalty = repeatCount * 300.0;
         }
 
         //Bonus for matches played fewer times
-        var timesPlayedBonus = (minTimesPlayed - combo.TimesPlayed) * 50.0;
+        var difference = minTimesPlayed - combo.TimesPlayed;
+        var timesPlayedBonus = (difference > 5 ? 5 : difference) * 300.0;
 
         return fairnessScore - repetitionPenalty + timesPlayedBonus;
     }
-
 
     private MatchDto ConvertToMatchDto(CachedMatchCombination combo, Dictionary<Guid, string> userNameLookup)
     {
