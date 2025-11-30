@@ -378,7 +378,7 @@ public class MatchGenerator : IMatchGenerator
                 .Sum(c => c.TimesPlayed);
 
             var timeRatio = maxActiveTime > 0 ? activeTime / maxActiveTime : 1.0;
-            var expectedMatches = maxMatchesPlayed * (timeRatio < 0.3 ? 0.3 : timeRatio);
+            var expectedMatches = maxMatchesPlayed * (timeRatio < 0.1 ? 0.1 : timeRatio);
 
             var matchesDeficit = expectedMatches - playerMatchCount;
             fairnessScore += (matchesDeficit > 5 ? 5 : matchesDeficit) * 100.0;
@@ -390,7 +390,7 @@ public class MatchGenerator : IMatchGenerator
         {
             var lastMatchPlayerIds = lastMatch.MatchTeams.Select(mt => mt.UserId).ToList();
             var repeatCount = playerIds.Count(pid => lastMatchPlayerIds.Contains(pid));
-            repetitionPenalty = repeatCount * 300.0;
+            repetitionPenalty = repeatCount * 200.0;
         }
 
         //Bonus for matches played fewer times
