@@ -106,6 +106,12 @@ export interface LeaderboardEntry {
   points: number;
 }
 
+export interface BackupInfo {
+  fileName: string;
+  createdDate: string;
+  size: number;
+}
+
 // Users API
 export const usersApi = {
   getAll: () => api.get<User[]>('/users'),
@@ -141,9 +147,9 @@ export const matchesApi = {
   createCustom: (sessionId: string, team1UserIds: string[], team2UserIds: string[]) =>
     api.post<string>('/matches', { SessionId: sessionId, Team1UserIds: team1UserIds, Team2UserIds: team2UserIds }),
   completeMatch: (sessionId: string, team1UserIds: string[], team2UserIds: string[], team1Score: number, team2Score: number) =>
-    api.post<string>('/matches/complete', { 
-      SessionId: sessionId, 
-      Team1UserIds: team1UserIds, 
+    api.post<string>('/matches/complete', {
+      SessionId: sessionId,
+      Team1UserIds: team1UserIds,
       Team2UserIds: team2UserIds,
       Team1Score: team1Score,
       Team2Score: team2Score
@@ -151,4 +157,11 @@ export const matchesApi = {
   updateScore: (id: string, team1Score: number, team2Score: number) =>
     api.put(`/matches/${id}/score`, { Team1Score: team1Score, Team2Score: team2Score }),
   delete: (id: string) => api.delete(`/matches/${id}`),
+};
+
+// Backup API
+export const backupApi = {
+  list: () => api.get<{ backups: BackupInfo[], backupDirectory: string }>('/backup/list'),
+  create: () => api.post<{ message: string, backupFile: string, path: string }>('/backup/create'),
+  restore: (fileName: string) => api.post<{ message: string, restoredFrom: string, safetyBackupCreated?: string }>(`/backup/restore/${fileName}`),
 };

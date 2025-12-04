@@ -1,0 +1,200 @@
+.settings-page {
+  min-height: 100vh;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.settings-page h1 {
+  text-align: center;
+  margin-bottom: 30px;
+  font-size: 2.5rem;
+}
+
+.settings-page h2 {
+  color: #333;
+  font-size: 1.8rem;
+  margin-bottom: 15px;
+  font-weight: 600;
+}
+
+.settings-page h3 {
+  color: #333;
+  font-size: 1.3rem;
+  margin-bottom: 15px;
+  font-weight: 500;
+}
+
+.error-message {
+  background-color: #fee;
+  color: #c33;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.warning-message {
+  background-color: #fff3cd;
+  color: #856404;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  border-left: 4px solid #ffc107;
+}
+
+.warning-message strong {
+  font-weight: 600;
+}
+
+.no-data {
+  text-align: center;
+  color: #666;
+  font-size: 1.2rem;
+  margin: 40px 0;
+}
+
+.settings-section {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  padding: 25px;
+  margin-bottom: 30px;
+}
+
+.settings-section p {
+  color: #666;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.action-button {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.action-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.action-button.primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.action-button.danger {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+  color: white;
+}
+
+.action-button.danger:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ee5a52 0%, #dc4545 100%);
+}
+
+.action-button.small {
+  padding: 8px 16px;
+  font-size: 0.9rem;
+}
+
+.backup-list {
+  margin-top: 20px;
+}
+
+.backup-items {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.backup-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border-left: 4px solid #667eea;
+}
+
+.backup-info {
+  flex: 1;
+}
+
+.backup-name {
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 5px;
+  word-break: break-all;
+}
+
+.backup-details {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.black {
+  color: #333;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .settings-page {
+    padding: 15px;
+  }
+
+  .settings-page h1 {
+    font-size: 2rem;
+    margin-bottom: 20px;
+  }
+
+  .settings-page h2 {
+    font-size: 1.5rem;
+  }
+
+  .settings-section {
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .backup-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .action-button.small {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-page {
+    padding: 10px;
+  }
+
+  .settings-page h1 {
+    font-size: 1.6rem;
+  }
+
+  .settings-section {
+    padding: 15px;
+  }
+
+  .action-button {
+    padding: 10px 20px;
+    font-size: 0.9rem;
+  }
+}

@@ -4,6 +4,7 @@ import Users from './pages/Users';
 import Sessions from './pages/Sessions';
 import SessionDetail from './pages/SessionDetail';
 import Leaderboard from './pages/Leaderboard';
+import Settings from './pages/Settings';
 import ToastContainer from './components/ToastContainer';
 import './App.css';
 
@@ -30,6 +31,7 @@ function App() {
               <Link to="/" className="nav-link" onClick={closeMobileMenu}>Sessions</Link>
               <Link to="/users" className="nav-link" onClick={closeMobileMenu}>Users</Link>
               <Link to="/leaderboard" className="nav-link" onClick={closeMobileMenu}>Leaderboard</Link>
+              <Link to="/settings" className="nav-link" onClick={closeMobileMenu}>Settings</Link>
             </div>
           </div>
         </nav>
@@ -39,6 +41,7 @@ function App() {
             <Route path="/" element={<Sessions />} />
             <Route path="/users" element={<Users />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/sessions/:id" element={<SessionDetail />} />
           </Routes>
         </main>
