@@ -32,7 +32,7 @@ function Settings() {
   const handleCreateBackup = async () => {
     try {
       setLoading(true);
-      const response = await backupApi.create();
+      await backupApi.create();
       showToast('Backup created successfully!', 'success');
       await loadBackups(); // Refresh the list
     } catch (err) {
@@ -51,7 +51,7 @@ function Settings() {
     try {
       setLoading(true);
       setShowRestoreDialog(false);
-      const response = await backupApi.restore(selectedBackup);
+      await backupApi.restore(selectedBackup);
       showToast('Database restored successfully!', 'success');
 
       // Refresh backups list
